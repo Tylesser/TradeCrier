@@ -350,10 +350,11 @@ local function ShowTooltip(self)
   GameTooltip:Show()
 end
 
+-- The glow frame's own OnUpdate: `self` is the glow (1.0.0 asked for self.glow here and erred every frame while a
+-- post was due, the user's error 2026-11-26).
 local function Pulse(self, elapsed)
   self.phase = (self.phase or 0) + elapsed
-  local alpha = 0.55 + 0.45 * math.sin(self.phase * 4)
-  self.glow:SetAlpha(alpha)
+  self:SetAlpha(0.55 + 0.45 * math.sin(self.phase * 4))
 end
 
 local function MakeButton()
