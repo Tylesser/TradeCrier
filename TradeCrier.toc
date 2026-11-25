@@ -1,0 +1,15 @@
+## Interface: 16001
+## Title: Tylesser - Trade Crier
+## Notes: Your message with your profession links in Trade chat, again every few minutes while you are in a city: one click posts it. For WoW Forever.
+## Author: Tylesser
+## Version: @project-version@
+## SavedVariables: TradeCrierDB
+## SavedVariablesPerCharacter: TradeCrierCharDB
+## IconTexture: Interface\AddOns\TradeCrier\Media\Icon
+## X-License: MIT
+## X-Website: https://tylesser.com/tradecrier/
+
+Tylesser.lua
+Host.lua
+Crier.lua
+Options.lua
