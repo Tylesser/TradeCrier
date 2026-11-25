@@ -18,4 +18,4 @@ A message with the character's profession links in Trade chat, again every few m
   Blizzard_ProfessionsBook). `<Name>` / `<professions>` codes (also `{Name}`; the game's Friz Quadrata draws { } like a link's [ ], seen in the bench) expand at post time; 255 letters max after expansion.
 - `Options.lua`: the options page (T kit) and `/crier`.
 - Test: `node tools/harness/run.js tc_test.lua E:/Games/Wow/Addons/TradeCrier` (from tools/harness).
-- Not set up yet: GitHub repo, CurseForge and Wago projects (their IDs go into the .toc), icon, site entry.
+- GitHub Tylesser/TradeCrier, CurseForge 1831458, Wago BKpEyRGE (slug tylesser-trade-crier), all made 2026-11-26.

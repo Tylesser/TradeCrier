@@ -7,6 +7,8 @@
 ## SavedVariablesPerCharacter: TradeCrierCharDB
 ## IconTexture: Interface\AddOns\TradeCrier\Media\Icon
 ## X-License: MIT
+## X-Curse-Project-ID: 1831458
+## X-Wago-ID: BKpEyRGE
 ## X-Website: https://tylesser.com/tradecrier/
 
 Tylesser.lua
