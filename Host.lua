@@ -1,8 +1,8 @@
 local addonName, ns = ...
 
 -- Tylesser - Trade Crier: what Crier.lua (shared with Codex's Modules/Crier) needs from its host. Settings in
--- TradeCrierDB (account: timing, channel, button, key) and TradeCrierCharDB (this character: the message, paused,
--- the last post). Starts at PLAYER_LOGIN.
+-- TradeCrierDB (account: channel, button, key) and TradeCrierCharDB (this character: the messages with their times,
+-- paused, the last post). Starts at PLAYER_LOGIN.
 
 local T = ns.T
 local C = {}

@@ -1,12 +1,12 @@
 local addonName, ns = ...
 
--- Trade Crier (2026-11-26, the user's request): your own message with your profession links in Trade chat, again
--- every few minutes while you are in a city. This file is shared byte for byte by the standalone addon
--- (TradeCrier/Crier.lua) and Codex (Modules/Crier/Crier.lua); change both together.
+-- Trade Crier (2026-11-26, the user's request): your own messages with your profession links in Trade chat, each
+-- again after its own time (in seconds, the user's wish 2026-11-26) while you are in a city. This file is shared byte
+-- for byte by the standalone addon (TradeCrier/Crier.lua) and Codex (Modules/Crier/Crier.lua); change both together.
 --
 -- The host fills ns.crier (C) before this file loads:
 --   C.DB()          account settings (filled with C.DEFAULTS here)
---   C.CharDB()      this character's (C.CHAR_DEFAULTS: the message, paused, the last post)
+--   C.CharDB()      this character's (C.CHAR_DEFAULTS: the messages, paused, the last post)
 --   C.Say(text)     a chat line with the host's prefix
 --   C.BUTTON_NAME   the post button's frame name (the key binding clicks it)
 --   C.Look(button)  the button's frame in the host's style; C.Accent() = { r, g, b } for its glow
@@ -23,7 +23,7 @@ local addonName, ns = ...
 local C = ns.crier
 
 C.DEFAULTS = {
-  interval = 10, -- minutes between posts (C.INTERVALS)
+  every = 600, -- seconds a new message waits between its posts
   channel = "trade", -- C.CHANNELS key
   sound = false, -- a sound when a post is due
   remind = false, -- a chat line when a post is due
@@ -33,17 +33,18 @@ C.DEFAULTS = {
   -- key = "F9", pos = { point, x, y }
 }
 C.CHAR_DEFAULTS = {
-  message = "",
   paused = false,
-  -- lastPost = time()
+  -- messages = { { text, every = seconds, off = true or nil, icon = path or nil (automatic), last = time() }, ... }
+  -- lastPost = time() (any message)
 }
-C.INTERVALS = { 3, 5, 10, 15, 20, 30, 45, 60 }
 C.CHANNELS = {
   { key = "trade", zone = 2, name = "Trade" },
   { key = "services", zone = 42, name = "Trade (Services)" },
 }
 C.MAX_LENGTH = 255 -- the game's limit for one chat message
-C.MIN_GAP = 30 -- seconds between two posts, however often the button is pressed
+C.MIN_EVERY = 30 -- the shortest time a message waits between its posts, in seconds
+C.MAX_EVERY = 86400
+C.MAX_MESSAGES = 8
 C.SIZE = 40
 C.ICON = "Interface\\Icons\\INV_Misc_Note_01"
 
@@ -62,6 +63,66 @@ end
 
 function C.Char()
   return Fill(C.CharDB(), C.CHAR_DEFAULTS)
+end
+
+-- A time between posts as a message keeps it: whole seconds from C.MIN_EVERY to C.MAX_EVERY.
+function C.ClampEvery(seconds)
+  seconds = math.floor((tonumber(seconds) or tonumber(C.Settings().every) or 600) + 0.5)
+  return math.max(C.MIN_EVERY, math.min(C.MAX_EVERY, seconds))
+end
+
+-- This character's messages, never empty (an empty first one to write in). 1.0.x kept one message
+-- (char.message) and one account-wide time in minutes (settings.interval): they become the first message.
+function C.Messages()
+  local char, settings = C.Char(), C.Settings()
+  if type(char.messages) ~= "table" then
+    char.messages = {}
+    if type(char.message) == "string" and char.message ~= "" then
+      char.messages[1] = { text = char.message, every = C.ClampEvery((tonumber(settings.interval) or 10) * 60),
+        last = char.lastPost }
+    end
+  end
+  char.message = nil
+  local list = char.messages
+  for index = #list, 1, -1 do
+    if type(list[index]) ~= "table" then
+      table.remove(list, index)
+    end
+  end
+  if #list == 0 then
+    list[1] = { text = "", every = C.ClampEvery(settings.every) }
+  end
+  for _, message in ipairs(list) do
+    message.text = type(message.text) == "string" and message.text or ""
+    message.every = C.ClampEvery(message.every)
+  end
+  return list
+end
+
+-- A new empty message at the end; returns its index, or nil at C.MAX_MESSAGES.
+function C.AddMessage()
+  local list = C.Messages()
+  if #list >= C.MAX_MESSAGES then
+    return nil
+  end
+  list[#list + 1] = { text = "", every = C.ClampEvery(C.Settings().every) }
+  C.Refresh()
+  return #list
+end
+
+-- Removes a message (the last one left is only emptied).
+function C.RemoveMessage(index)
+  local list = C.Messages()
+  if not list[index] then
+    return
+  end
+  if #list == 1 then
+    list[1].text = ""
+    list[1].last = nil
+  else
+    table.remove(list, index)
+  end
+  C.Refresh()
 end
 
 local function Now()
@@ -198,23 +259,64 @@ end
 
 -- State --------------------------------------------------------------------------------------------------
 
--- Seconds until the next post is due (0 = due now).
-function C.NextIn()
-  local last = C.Char().lastPost
+-- Seconds until this message may be posted again (0 = now).
+function C.WaitFor(message)
+  local last = message.last
   if type(last) ~= "number" then
     return 0
   end
-  return math.max(0, last + C.Settings().interval * 60 - Now())
+  return math.max(0, last + C.ClampEvery(message.every) - Now())
+end
+
+-- What a message is on its own: "empty", "off", "long" or "ok", and its text as posted (and the unknown codes).
+function C.MessageState(message)
+  local text, unknown = C.Expand(message.text)
+  if text == "" then
+    return "empty", text, unknown
+  elseif message.off then
+    return "off", text, unknown
+  elseif #text > C.MAX_LENGTH then
+    return "long", text, unknown
+  end
+  return "ok", text, unknown
+end
+
+-- The message to post next: of those that can go, the one whose time comes first (when several are due, the one
+-- that waited longest, then the first in the list). Returns its index, the message and the seconds until it may go
+-- (0 = now), or nil.
+function C.NextMessage()
+  local list = C.Messages()
+  local best, bestWait, bestLast
+  for index, message in ipairs(list) do
+    if C.MessageState(message) == "ok" then
+      local wait = C.WaitFor(message)
+      local last = type(message.last) == "number" and message.last or -1
+      if not best or wait < bestWait or (wait == bestWait and last < bestLast) then
+        best, bestWait, bestLast = index, wait, last
+      end
+    end
+  end
+  if best then
+    return best, list[best], bestWait
+  end
+end
+
+-- Seconds until the next post is due (0 = due now).
+function C.NextIn()
+  local _, _, wait = C.NextMessage()
+  return wait or 0
 end
 
 -- "message" (nothing to post), "long", "paused", "nochannel", "lockdown", "wait", "due".
 function C.State()
   local char = C.Char()
-  local text = C.Expand(char.message)
-  if text == "" then
+  if not C.NextMessage() then
+    for _, message in ipairs(C.Messages()) do
+      if C.MessageState(message) == "long" then
+        return "long"
+      end
+    end
     return "message"
-  elseif #text > C.MAX_LENGTH then
-    return "long"
   elseif char.paused then
     return "paused"
   elseif not C.FindChannel() then
@@ -237,40 +339,44 @@ function C.StatusText()
   local state = C.State()
   local channel = C.ChannelDef(C.Settings().channel).name
   if state == "message" then
-    return "Write your message first."
+    return "Write a message first."
   elseif state == "long" then
-    return ("The message is %d letters long with its links; the game takes %d."):format(#C.Expand(C.Char().message),
-      C.MAX_LENGTH)
+    return ("Your message is too long with its links; the game takes %d letters."):format(C.MAX_LENGTH)
   elseif state == "paused" then
     return "Paused on this character."
   elseif state == "nochannel" then
     return ("No %s chat here: it is in the capital cities."):format(channel)
   elseif state == "lockdown" then
     return "The game doesn't let addons send chat right now."
-  elseif state == "wait" then
-    return ("Next post in %s."):format(C.Clock(C.NextIn()))
   end
-  return ("Time to post in %s: click the button%s."):format(channel,
+  local index = C.NextMessage()
+  local which = #C.Messages() > 1 and index and (" (message %d)"):format(index) or ""
+  if state == "wait" then
+    return ("Next post in %s%s."):format(C.Clock(C.NextIn()), which)
+  end
+  return ("Time to post%s in %s: click the button%s."):format(which, channel,
     C.Settings().key and (" or press " .. C.Settings().key) or "")
 end
 
 -- Posting (only from a click or a key press) -------------------------------------------------------------
 
--- Sends the message now. Returns true, or false and why (also said in chat).
+-- Sends the next message (C.NextMessage) once its time has come. Returns true, or false and why (also said in
+-- chat).
 function C.Post()
   local function No(why)
     C.Say(why)
     return false, why
   end
   local char = C.Char()
-  local text, unknown = C.Expand(char.message)
-  if text == "" then
-    return No("Write your message first: " .. (C.COMMAND or "the options page") .. ".")
+  local index, message, wait = C.NextMessage()
+  if not index then
+    if C.State() == "long" then
+      return No(("Your message is too long with its links; the game takes %d letters. Make it shorter."):format(
+        C.MAX_LENGTH))
+    end
+    return No("Write a message first: " .. (C.COMMAND or "the options page") .. ".")
   end
-  if #text > C.MAX_LENGTH then
-    return No(("The message is %d letters long with its links; the game takes %d. Make it shorter."):format(#text,
-      C.MAX_LENGTH))
-  end
+  local text, unknown = C.Expand(message.text)
   local id, name = C.FindChannel()
   if not id then
     return No(("No %s chat here: it is in the capital cities."):format(C.ChannelDef(C.Settings().channel).name))
@@ -278,9 +384,9 @@ function C.Post()
   if C.Locked() then
     return No("The game doesn't let addons send chat right now.")
   end
-  local last = char.lastPost
-  if type(last) == "number" and Now() - last < C.MIN_GAP then
-    return No(("You posted %d seconds ago."):format(Now() - last))
+  if wait > 0 then
+    return No(("Next post in %s%s."):format(C.Clock(wait),
+      #C.Messages() > 1 and (" (message %d)"):format(index) or ""))
   end
   local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
   if type(send) ~= "function" then
@@ -290,7 +396,8 @@ function C.Post()
   if not ok then
     return No("The game didn't send it: " .. tostring(err))
   end
-  char.lastPost = Now()
+  message.last = Now()
+  char.lastPost = message.last
   C.notified = false
   if #unknown > 0 then
     C.Say(("Posted, but %s matched none of your professions."):format(table.concat(unknown, ", ")))
@@ -335,13 +442,14 @@ local function ShowTooltip(self)
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
   GameTooltip:AddLine(C.BRAND or "Trade Crier")
   GameTooltip:AddLine(C.StatusText(), 1, 1, 1, true)
-  local text = C.Expand(C.Char().message)
+  local _, message = C.NextMessage()
+  local text = message and C.Expand(message.text) or ""
   if text ~= "" then
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(text, 0.85, 0.85, 0.85, true)
   end
   GameTooltip:AddLine(" ")
-  GameTooltip:AddLine("Click: post it now" .. (C.Settings().key and (" (or " .. C.Settings().key .. ")") or ""),
+  GameTooltip:AddLine("Click: post it when it's time" .. (C.Settings().key and (" (or " .. C.Settings().key .. ")") or ""),
     0.6, 0.6, 0.6)
   GameTooltip:AddLine("Right-click: options. Shift-right-click: pause", 0.6, 0.6, 0.6)
   if not C.Settings().locked then
@@ -437,6 +545,174 @@ local function FirstIcon()
   return C.ICON
 end
 
+-- Icons ---------------------------------------------------------------------------------------------------
+
+-- The icon a message gets when none is picked (the user's wish, 2026-11-26): the profession it links first
+-- (<Tailoring> = Tailoring's icon; <professions> = the first profession with a link), else the first profession,
+-- else the note.
+function C.AutoIcon(message)
+  local text = message and message.text or ""
+  local byName = {}
+  for _, profession in ipairs(C.Professions()) do
+    byName[profession.name:lower()] = profession
+  end
+  local first, firstAt
+  for _, pattern in ipairs({ "()<([^<>|]*)>", "(){([^{}|]*)}" }) do
+    for at, word in text:gmatch(pattern) do
+      local lower = word:lower():match("^%s*(.-)%s*$")
+      local icon
+      if lower == "professions" then
+        local linkable = C.Linkable()[1]
+        icon = linkable and linkable.icon
+      elseif byName[lower] then
+        icon = byName[lower].icon
+      end
+      if icon and (not firstAt or at < firstAt) then
+        first, firstAt = icon, at
+      end
+    end
+  end
+  return first or FirstIcon()
+end
+
+-- The message's icon: the one picked, or the automatic one.
+function C.MessageIcon(message)
+  if message and message.icon ~= nil then
+    return message.icon
+  end
+  return C.AutoIcon(message)
+end
+
+-- Icons to pick from: your professions' first, then a few for any trade (each one Codex already shows in game).
+C.ICON_CHOICES = {
+  "INV_Misc_Note_01", "INV_Misc_Note_02", "INV_Scroll_03", "INV_Misc_Book_09", "INV_Misc_Coin_01", "INV_Misc_Coin_02",
+  "INV_Misc_Bag_08", "INV_Misc_Bag_10", "INV_Box_02", "INV_Misc_Gem_Ruby_01", "INV_Jewelry_Ring_03", "INV_Misc_Herb_07",
+  "INV_Chest_Cloth_17", "INV_Hammer_04", "Trade_BlackSmithing", "INV_Misc_Gear_01", "INV_Misc_Key_03",
+  "INV_Misc_GroupNeedMore",
+}
+for index, name in ipairs(C.ICON_CHOICES) do
+  C.ICON_CHOICES[index] = "Interface\\Icons\\" .. name
+end
+
+function C.IconChoices()
+  local out, seen = {}, {}
+  for _, profession in ipairs(C.Professions()) do
+    if profession.icon and not seen[profession.icon] then
+      seen[profession.icon] = true
+      out[#out + 1] = profession.icon
+    end
+  end
+  for _, icon in ipairs(C.ICON_CHOICES) do
+    if not seen[icon] then
+      seen[icon] = true
+      out[#out + 1] = icon
+    end
+  end
+  return out
+end
+
+-- Sets a message's icon (nil = automatic).
+function C.SetIcon(index, icon)
+  local message = C.Messages()[index]
+  if message then
+    message.icon = icon
+    C.Refresh()
+  end
+end
+
+local ICON_CELL, ICON_COLUMNS = 30, 8
+local picker
+
+-- A small grid of icons beside `anchor` for message `index`: "Auto" first, then C.IconChoices(). A click picks and
+-- closes it; `after` runs after a pick (the page repaints). Clicking the anchor again or Escape closes it.
+function C.ShowIconPicker(anchor, index, after)
+  if picker and picker:IsShown() and picker.index == index and picker.anchor == anchor then
+    picker:Hide()
+    return
+  end
+  if not picker then
+    picker = CreateFrame("Frame", C.BUTTON_NAME .. "IconPicker", UIParent)
+    picker:SetFrameStrata("DIALOG")
+    picker:SetClampedToScreen(true)
+    picker:EnableMouse(true)
+    local fill = picker:CreateTexture(nil, "BACKGROUND")
+    fill:SetAllPoints()
+    fill:SetColorTexture(0.05, 0.05, 0.06, 0.96)
+    local accent = C.Accent and C.Accent() or { 1, 0.82, 0 }
+    for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+      local line = picker:CreateTexture(nil, "BORDER")
+      line:SetColorTexture(accent[1], accent[2], accent[3], 0.8)
+      if side == "TOP" or side == "BOTTOM" then
+        line:SetPoint(side .. "LEFT")
+        line:SetPoint(side .. "RIGHT")
+        line:SetHeight(1)
+      else
+        line:SetPoint("TOP" .. side)
+        line:SetPoint("BOTTOM" .. side)
+        line:SetWidth(1)
+      end
+    end
+    picker.cells = {}
+    if type(UISpecialFrames) == "table" then
+      table.insert(UISpecialFrames, picker:GetName())
+    end
+  end
+  picker.index, picker.anchor = index, anchor
+  local message = C.Messages()[index]
+  local choices = { false } -- false = automatic
+  for _, icon in ipairs(C.IconChoices()) do
+    choices[#choices + 1] = icon
+  end
+  local accent = C.Accent and C.Accent() or { 1, 0.82, 0 }
+  for slot, choice in ipairs(choices) do
+    local cell = picker.cells[slot]
+    if not cell then
+      cell = CreateFrame("Button", nil, picker)
+      cell:SetSize(ICON_CELL - 2, ICON_CELL - 2)
+      cell.icon = cell:CreateTexture(nil, "ARTWORK")
+      cell.icon:SetPoint("TOPLEFT", 2, -2)
+      cell.icon:SetPoint("BOTTOMRIGHT", -2, 2)
+      cell.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+      cell.mark = cell:CreateTexture(nil, "BACKGROUND")
+      cell.mark:SetAllPoints()
+      cell.mark:SetColorTexture(accent[1], accent[2], accent[3], 1)
+      local hover = cell:CreateTexture(nil, "HIGHLIGHT")
+      hover:SetAllPoints(cell.icon)
+      hover:SetColorTexture(1, 1, 1, 0.2)
+      cell.auto = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+      cell.auto:SetPoint("BOTTOM", 0, 2)
+      cell.auto:SetText("Auto")
+      cell:SetScript("OnClick", function(self)
+        C.SetIcon(picker.index, self.choice or nil)
+        picker:Hide()
+        if picker.after then
+          picker.after()
+        end
+      end)
+      picker.cells[slot] = cell
+    end
+    local column, row = (slot - 1) % ICON_COLUMNS, math.floor((slot - 1) / ICON_COLUMNS)
+    cell:ClearAllPoints()
+    cell:SetPoint("TOPLEFT", 6 + column * ICON_CELL, -6 - row * ICON_CELL)
+    cell.choice = choice
+    cell.icon:SetTexture(choice or C.AutoIcon(message))
+    cell.auto:SetShown(not choice)
+    local picked = message and (choice and message.icon == choice or (not choice and message.icon == nil))
+    cell.mark:SetShown(picked and true or false)
+    cell:Show()
+  end
+  for slot = #choices + 1, #picker.cells do
+    picker.cells[slot]:Hide()
+  end
+  local rows = math.ceil(#choices / ICON_COLUMNS)
+  picker:SetSize(12 + math.min(#choices, ICON_COLUMNS) * ICON_CELL - 2, 12 + rows * ICON_CELL - 2)
+  picker.after = after
+  picker:ClearAllPoints()
+  picker:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
+  picker:Show()
+  C.picker = picker
+end
+
 -- A post just became due: the sound and the chat line, once per round.
 local function Notify()
   if C.notified then
@@ -464,7 +740,8 @@ function C.Refresh()
   local state = C.State()
   local show = not (settings.onlyCities and (state == "nochannel"))
   button:SetShown(show)
-  button.icon:SetTexture(FirstIcon())
+  local _, upcoming = C.NextMessage()
+  button.icon:SetTexture(upcoming and C.MessageIcon(upcoming) or C.MessageIcon(C.Messages()[1]))
   local due = state == "due"
   button.glow:SetShown(due)
   button.icon:SetDesaturated(state == "paused" or state == "message" or state == "long")

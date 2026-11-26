@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+- **Several messages** (up to 8 per character), **each with its own time in seconds** (30 at least): a message goes out again only once its time has passed, and the button posts the one that has waited longest. Untick a message to keep it without posting it. Your message and your time from 1.0 become the first message.
+- **An icon per message**: click a message's icon to pick another. Until you do, it shows the profession the message links. The button shows the icon of the message that goes next.
+- The options page scrolls.
+
 ## 1.0.1
 
 - Trade Crier: no more Lua error every frame while a post is due (the button's glow).
