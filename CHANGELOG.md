@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0
+
+- **A button per message** by your character, each with its own icon, countdown and glow. Click the one you want to post; the post key still posts the one that has waited longest. The buttons sit side by side (or in a column: "Stack the buttons in a column"), and dragging any of them moves them all.
+
 ## 1.1.0
 
 - **Several messages** (up to 8 per character), **each with its own time in seconds** (30 at least): a message goes out again only once its time has passed, and the button posts the one that has waited longest. Untick a message to keep it without posting it. Your message and your time from 1.0 become the first message.

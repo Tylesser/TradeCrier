@@ -8,13 +8,13 @@ local addonName, ns = ...
 --   C.DB()          account settings (filled with C.DEFAULTS here)
 --   C.CharDB()      this character's (C.CHAR_DEFAULTS: the messages, paused, the last post)
 --   C.Say(text)     a chat line with the host's prefix
---   C.BUTTON_NAME   the post button's frame name (the key binding clicks it)
+--   C.BUTTON_NAME   the first message's button (then ..2, ..3; the bar ..Bar, the key's button ..Key)
 --   C.Look(button)  the button's frame in the host's style; C.Accent() = { r, g, b } for its glow
 --   C.OpenOptions() the options page
 --
 -- Posting: the game sends an addon's message to a channel only inside a click or key press (Forever's API marks
 -- SendChatMessage HasRestrictions; the rule since patch 8.2.5). Nothing here ever posts from a timer: the button
--- lights when a post is due, and the player's click on it, its key or "/crier post" sends the message.
+-- of a message lights when its post is due, and the player's click on it, the key or "/crier post" sends it.
 -- Channels: zoneChannelID 2 = "Trade - %s", 42 = "Trade (Services) - %s" (Forever's ChatChannels table on
 -- wago.tools), found among the joined channels (GetChannelList) with C_ChatInfo.GetChannelInfoFromIdentifier.
 -- Profession links: C_SpellBook.GetSpellBookItemTradeSkillLink on the profession's spellbook slot (spellOffset +
@@ -28,7 +28,8 @@ C.DEFAULTS = {
   sound = false, -- a sound when a post is due
   remind = false, -- a chat line when a post is due
   onlyCities = true, -- the button only where the channel is
-  locked = false, -- the button can't be dragged
+  locked = false, -- the buttons can't be dragged
+  column = false, -- the buttons above each other (else side by side)
   scale = 1,
   -- key = "F9", pos = { point, x, y }
 }
@@ -354,27 +355,41 @@ function C.StatusText()
   if state == "wait" then
     return ("Next post in %s%s."):format(C.Clock(C.NextIn()), which)
   end
-  return ("Time to post%s in %s: click the button%s."):format(which, channel,
+  return ("Time to post%s in %s: click %s button%s."):format(which, channel, which ~= "" and "its" or "the",
     C.Settings().key and (" or press " .. C.Settings().key) or "")
 end
 
 -- Posting (only from a click or a key press) -------------------------------------------------------------
 
--- Sends the next message (C.NextMessage) once its time has come. Returns true, or false and why (also said in
--- chat).
-function C.Post()
+-- Sends message `index`, or with no index the one that has waited longest (C.NextMessage), once its time has come.
+-- Returns true, or false and why (also said in chat).
+function C.Post(index)
   local function No(why)
     C.Say(why)
     return false, why
   end
   local char = C.Char()
-  local index, message, wait = C.NextMessage()
-  if not index then
-    if C.State() == "long" then
-      return No(("Your message is too long with its links; the game takes %d letters. Make it shorter."):format(
+  local list = C.Messages()
+  local message, wait
+  if index then
+    message = list[index]
+    local state = message and C.MessageState(message)
+    if state == "long" then
+      return No(("Message %d is too long with its links; the game takes %d letters. Make it shorter."):format(index,
         C.MAX_LENGTH))
+    elseif state ~= "ok" then
+      return No(("Message %d has nothing to post."):format(index))
     end
-    return No("Write a message first: " .. (C.COMMAND or "the options page") .. ".")
+    wait = C.WaitFor(message)
+  else
+    index, message, wait = C.NextMessage()
+    if not index then
+      if C.State() == "long" then
+        return No(("Your message is too long with its links; the game takes %d letters. Make it shorter."):format(
+          C.MAX_LENGTH))
+      end
+      return No("Write a message first: " .. (C.COMMAND or "the options page") .. ".")
+    end
   end
   local text, unknown = C.Expand(message.text)
   local id, name = C.FindChannel()
@@ -385,8 +400,7 @@ function C.Post()
     return No("The game doesn't let addons send chat right now.")
   end
   if wait > 0 then
-    return No(("Next post in %s%s."):format(C.Clock(wait),
-      #C.Messages() > 1 and (" (message %d)"):format(index) or ""))
+    return No(("Next post in %s%s."):format(C.Clock(wait), #list > 1 and (" (message %d)"):format(index) or ""))
   end
   local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
   if type(send) ~= "function" then
@@ -398,7 +412,6 @@ function C.Post()
   end
   message.last = Now()
   char.lastPost = message.last
-  C.notified = false
   if #unknown > 0 then
     C.Say(("Posted, but %s matched none of your professions."):format(table.concat(unknown, ", ")))
   end
@@ -407,27 +420,33 @@ function C.Post()
   return true
 end
 
--- The button ---------------------------------------------------------------------------------------------
+-- The buttons --------------------------------------------------------------------------------------------
+-- One button per message that has something to post (the user's wish, 2026-11-26), each with its own countdown and
+-- glow; a click posts that message. They sit in a bar (C.holder) that keeps the place; dragging any button moves the
+-- bar. The post key clicks a separate invisible button that posts the message that has waited longest.
 
-local button
+local holder, keyButton
+local buttons = {}
+C.buttons = buttons
+local GAP, COLUMN_GAP = 8, 18 -- a column leaves room for each button's label under it
 
 local function SavePlace()
-  local point, _, _, x, y = button:GetPoint(1)
+  local point, _, _, x, y = holder:GetPoint(1)
   C.Settings().pos = { point or "CENTER", math.floor((x or 0) + 0.5), math.floor((y or 0) + 0.5) }
 end
 
 function C.PlaceButton()
-  if not button then
+  if not holder then
     return
   end
   local pos = C.Settings().pos
-  button:ClearAllPoints()
+  holder:ClearAllPoints()
   if type(pos) == "table" then
-    button:SetPoint(pos[1] or "CENTER", UIParent, pos[1] or "CENTER", pos[2] or 0, pos[3] or 0)
+    holder:SetPoint(pos[1] or "CENTER", UIParent, pos[1] or "CENTER", pos[2] or 0, pos[3] or 0)
   else
-    button:SetPoint("CENTER", UIParent, "CENTER", 0, -180)
+    holder:SetPoint("CENTER", UIParent, "CENTER", 0, -180)
   end
-  button:SetScale(C.Settings().scale or 1)
+  holder:SetScale(C.Settings().scale or 1)
 end
 
 function C.ResetPlace()
@@ -435,24 +454,45 @@ function C.ResetPlace()
   C.PlaceButton()
 end
 
+-- One line on a button's own state, for its tooltip.
+local function ButtonStatus(self)
+  local state, index = self.state, self.index
+  local message = C.Messages()[index]
+  local channel = C.ChannelDef(C.Settings().channel).name
+  if state == "wait" and message then
+    return ("This one can go again in %s."):format(C.Clock(C.WaitFor(message)))
+  elseif state == "due" then
+    return ("Ready to post in %s."):format(channel)
+  elseif state == "long" then
+    return ("Too long with its links; the game takes %d letters."):format(C.MAX_LENGTH)
+  end
+  return C.StatusText()
+end
+
 local function ShowTooltip(self)
   if not GameTooltip then
     return
   end
+  local settings = C.Settings()
+  local many = #C.Messages() > 1
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-  GameTooltip:AddLine(C.BRAND or "Trade Crier")
-  GameTooltip:AddLine(C.StatusText(), 1, 1, 1, true)
-  local _, message = C.NextMessage()
+  GameTooltip:AddLine((C.BRAND or "Trade Crier") .. (many and (": message %d"):format(self.index) or ""))
+  GameTooltip:AddLine(ButtonStatus(self), 1, 1, 1, true)
+  local message = C.Messages()[self.index]
   local text = message and C.Expand(message.text) or ""
   if text ~= "" then
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(text, 0.85, 0.85, 0.85, true)
   end
   GameTooltip:AddLine(" ")
-  GameTooltip:AddLine("Click: post it when it's time" .. (C.Settings().key and (" (or " .. C.Settings().key .. ")") or ""),
+  GameTooltip:AddLine(many and "Click: post this message when it's ready" or "Click: post it when it's ready",
     0.6, 0.6, 0.6)
+  if settings.key then
+    GameTooltip:AddLine(settings.key .. (many and ": posts the one that has waited longest" or ": posts it too"),
+      0.6, 0.6, 0.6)
+  end
   GameTooltip:AddLine("Right-click: options. Shift-right-click: pause", 0.6, 0.6, 0.6)
-  if not C.Settings().locked then
+  if not settings.locked then
     GameTooltip:AddLine("Drag: move", 0.6, 0.6, 0.6)
   end
   GameTooltip:Show()
@@ -465,12 +505,32 @@ local function Pulse(self, elapsed)
   self:SetAlpha(0.55 + 0.45 * math.sin(self.phase * 4))
 end
 
-local function MakeButton()
-  button = CreateFrame("Button", C.BUTTON_NAME, UIParent)
+local function MakeBar()
+  holder = CreateFrame("Frame", C.BUTTON_NAME .. "Bar", UIParent)
+  holder:SetSize(C.SIZE, C.SIZE)
+  holder:SetFrameStrata("MEDIUM")
+  holder:SetClampedToScreen(true)
+  holder:SetMovable(true)
+  C.holder = holder
+  -- the key's button: never seen, never under the mouse; the key's press clicks it
+  keyButton = CreateFrame("Button", C.BUTTON_NAME .. "Key", UIParent)
+  keyButton:SetSize(1, 1)
+  keyButton:SetPoint("CENTER")
+  keyButton:SetAlpha(0)
+  keyButton:EnableMouse(false)
+  keyButton:RegisterForClicks("LeftButtonUp")
+  keyButton:SetScript("OnClick", function()
+    C.Post()
+  end)
+  C.keyButton = keyButton
+  C.PlaceButton()
+end
+
+-- The button of message `index` (made the first time it is needed).
+local function MakeButton(index)
+  local button = CreateFrame("Button", index == 1 and C.BUTTON_NAME or (C.BUTTON_NAME .. index), holder)
+  button.index = index
   button:SetSize(C.SIZE, C.SIZE)
-  button:SetFrameStrata("MEDIUM")
-  button:SetClampedToScreen(true)
-  button:SetMovable(true)
   button:EnableMouse(true)
   button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   button:RegisterForDrag("LeftButton")
@@ -478,7 +538,7 @@ local function MakeButton()
   button.icon:SetPoint("TOPLEFT", 2, -2)
   button.icon:SetPoint("BOTTOMRIGHT", -2, 2)
   button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-  -- the glow: a pulsing frame round the button while a post is due
+  -- the glow: a pulsing frame round the button while its post is due
   button.glow = CreateFrame("Frame", nil, button)
   button.glow:SetPoint("TOPLEFT", -4, 4)
   button.glow:SetPoint("BOTTOMRIGHT", 4, -4)
@@ -514,15 +574,19 @@ local function MakeButton()
       end
       return
     end
-    C.Post()
-  end)
-  button:SetScript("OnDragStart", function(self)
-    if not C.Settings().locked then
-      self:StartMoving()
+    if self.state == "message" then
+      C.Post() -- nothing written yet: says so
+    else
+      C.Post(self.index)
     end
   end)
-  button:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
+  button:SetScript("OnDragStart", function()
+    if not C.Settings().locked then
+      holder:StartMoving()
+    end
+  end)
+  button:SetScript("OnDragStop", function()
+    holder:StopMovingOrSizing()
     SavePlace()
   end)
   button:SetScript("OnEnter", ShowTooltip)
@@ -531,8 +595,10 @@ local function MakeButton()
       GameTooltip:Hide()
     end
   end)
-  C.button = button
-  C.PlaceButton()
+  buttons[index] = button
+  if index == 1 then
+    C.button = button
+  end
   return button
 end
 
@@ -713,49 +779,112 @@ function C.ShowIconPicker(anchor, index, after)
   C.picker = picker
 end
 
--- A post just became due: the sound and the chat line, once per round.
-local function Notify()
-  if C.notified then
-    return
-  end
-  C.notified = true
+-- A message's post just became due: the sound (once however many came due together) and the chat line, once per
+-- round (a round ends when that message is posted: its `last` changes).
+local notified = setmetatable({}, { __mode = "k" })
+local function Notify(due)
   local settings = C.Settings()
-  if settings.sound and PlaySound and SOUNDKIT and SOUNDKIT.TELL_MESSAGE then
-    PlaySound(SOUNDKIT.TELL_MESSAGE)
+  local sound = false
+  for _, entry in ipairs(due) do
+    local message = entry.message
+    local mark = message.last or 0
+    if notified[message] ~= mark then
+      notified[message] = mark
+      sound = true
+      if settings.remind then
+        C.Say(#C.Messages() > 1 and ("Message %d is ready: click its button."):format(entry.index) or C.StatusText())
+      end
+    end
   end
-  if settings.remind then
-    C.Say(C.StatusText())
+  if sound and settings.sound and PlaySound and SOUNDKIT and SOUNDKIT.TELL_MESSAGE then
+    PlaySound(SOUNDKIT.TELL_MESSAGE)
   end
 end
 
--- Shows, hides and repaints the button for the current state.
+-- Shows, hides, places and repaints the buttons for the current state.
 function C.Refresh()
   if not C.started then
     return
   end
-  if not button then
-    MakeButton()
+  if not holder then
+    MakeBar()
   end
   local settings = C.Settings()
   local state = C.State()
-  local show = not (settings.onlyCities and (state == "nochannel"))
-  button:SetShown(show)
-  local _, upcoming = C.NextMessage()
-  button.icon:SetTexture(upcoming and C.MessageIcon(upcoming) or C.MessageIcon(C.Messages()[1]))
-  local due = state == "due"
-  button.glow:SetShown(due)
-  button.icon:SetDesaturated(state == "paused" or state == "message" or state == "long")
-  if state == "wait" then
-    button.label:SetText(C.Clock(C.NextIn()))
-  elseif due then
-    button.label:SetText("Post")
-  elseif state == "paused" then
-    button.label:SetText("Paused")
-  else
-    button.label:SetText("")
+  local list = C.Messages()
+  local barShown = not (settings.onlyCities and state == "nochannel")
+  holder:SetShown(barShown)
+  -- the messages that get a button; with none, button 1 stays so the bar can be found (right-click: options)
+  local shown = {}
+  for index, message in ipairs(list) do
+    local kind = C.MessageState(message)
+    if kind == "ok" or kind == "long" then
+      shown[#shown + 1] = { index = index, message = message, kind = kind }
+    end
   end
-  if due and show then
-    Notify()
+  local placeholder = #shown == 0
+  if placeholder then
+    shown[1] = { index = 1, message = list[1], kind = "message" }
+  end
+  local visible = {}
+  for _, entry in ipairs(shown) do
+    visible[entry.index] = entry
+  end
+  for index = 1, C.MAX_MESSAGES do
+    if visible[index] and not buttons[index] then
+      MakeButton(index)
+    end
+    if buttons[index] then
+      buttons[index]:SetShown(visible[index] ~= nil)
+    end
+  end
+  local due = {}
+  local column = settings.column
+  for place, entry in ipairs(shown) do
+    local button = buttons[entry.index]
+    button:ClearAllPoints()
+    if column then
+      button:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -(place - 1) * (C.SIZE + COLUMN_GAP))
+    else
+      button:SetPoint("TOPLEFT", holder, "TOPLEFT", (place - 1) * (C.SIZE + GAP), 0)
+    end
+    local own
+    if placeholder then
+      own = "message"
+    elseif entry.kind == "long" then
+      own = "long"
+    elseif state == "paused" or state == "nochannel" or state == "lockdown" then
+      own = state
+    else
+      own = C.WaitFor(entry.message) > 0 and "wait" or "due"
+    end
+    button.state = own
+    button.icon:SetTexture(C.MessageIcon(entry.message))
+    button.icon:SetDesaturated(own == "paused" or own == "message" or own == "long")
+    button.glow:SetShown(own == "due")
+    if own == "wait" then
+      button.label:SetText(C.Clock(C.WaitFor(entry.message)))
+    elseif own == "due" then
+      button.label:SetText("Post")
+    elseif own == "paused" then
+      button.label:SetText("Paused")
+    elseif own == "long" then
+      button.label:SetText("Long")
+    else
+      button.label:SetText("")
+    end
+    if own == "due" then
+      due[#due + 1] = entry
+    end
+  end
+  local count = #shown
+  if column then
+    holder:SetSize(C.SIZE, count * (C.SIZE + COLUMN_GAP) - COLUMN_GAP)
+  else
+    holder:SetSize(count * (C.SIZE + GAP) - GAP, C.SIZE)
+  end
+  if barShown and #due > 0 then
+    Notify(due)
   end
   if C.OnRefresh then
     C.OnRefresh(state)
@@ -794,10 +923,10 @@ function C.KeyName(key)
   return name
 end
 
--- The key clicks the button (an override binding: the player's own binding of that key comes back when it's
--- cleared). Not in a fight: then it's set after the fight.
+-- The key clicks the key button, which posts the message that has waited longest (an override binding: the player's
+-- own binding of that key comes back when it's cleared). Not in a fight: then it's set after the fight.
 function C.ApplyKey()
-  if not button then
+  if not keyButton then
     return
   end
   if InCombatLockdown and InCombatLockdown() then
@@ -806,11 +935,11 @@ function C.ApplyKey()
   end
   C.keyPending = false
   if ClearOverrideBindings then
-    ClearOverrideBindings(button)
+    ClearOverrideBindings(keyButton)
   end
   local key = C.Settings().key
   if key and SetOverrideBindingClick then
-    SetOverrideBindingClick(button, true, key, C.BUTTON_NAME, "LeftButton")
+    SetOverrideBindingClick(keyButton, true, key, keyButton:GetName(), "LeftButton")
   end
 end
 
@@ -900,7 +1029,7 @@ function C.Start()
   C.started = true
   C.Settings()
   C.Char()
-  MakeButton()
+  MakeBar()
   C.events = CreateFrame("Frame")
   for _, event in ipairs(EVENTS) do
     C.events:RegisterEvent(event)
@@ -921,7 +1050,7 @@ function C.Start()
   -- the countdown
   if C_Timer and C_Timer.NewTicker then
     C.ticker = C_Timer.NewTicker(1, function()
-      if button and (button:IsShown() or C.State() ~= "nochannel") then
+      if holder and (holder:IsShown() or C.State() ~= "nochannel") then
         C.Refresh()
       end
     end)

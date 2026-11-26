@@ -17,7 +17,8 @@ A message with the character's profession links in Trade chat, again every few m
   a fallback. Profession links: `C_SpellBook.GetSpellBookItemTradeSkillLink(spellOffset + i, Player)` (as
   Blizzard_ProfessionsBook). `<Name>` / `<professions>` codes (also `{Name}`; the game's Friz Quadrata draws { } like a link's [ ], seen in the bench) expand at post time; 255 letters max after expansion.
 - Messages (2026-11-26): up to 8 per character, each with its own seconds (30 at least), on/off and icon (picked, or
-  the first profession it links); the button posts `C.NextMessage()`. 1.0's single `message` + `interval` minutes move
+  the first profession it links). A button per message (`TradeCrierButton`, `..2`, ...) in the bar
+  `TradeCrierButtonBar`; the key clicks `TradeCrierButtonKey`, which posts `C.NextMessage()`. 1.0's single `message` + `interval` minutes move
   into the list on first use. Details in Codex's CLAUDE.md (Modules/Crier).
 - `Options.lua`: the options page (T kit, in a scroll frame since the message list grows) and `/crier`.
 - Test: `node tools/harness/run.js tc_test.lua E:/Games/Wow/Addons/TradeCrier` (from tools/harness).

@@ -242,10 +242,11 @@ local function Build()
 
   local messageLabel = Label(content, "Your messages")
   messageLabel:SetPoint("TOPLEFT", left, -4)
-  local messageHint = Muted(Label(content, ("Each message goes out again only after its own time, in seconds (%d at "
-    .. "least). The button lights up when one is ready, with its icon, and posts the one that has waited longest. "
-    .. "Click an icon to pick another; until you do, a message shows the profession it links. Untick a message to "
-    .. "keep it without posting it."):format(C.MIN_EVERY), "small"))
+  local messageHint = Muted(Label(content, ("Each message has its own button by your character, with its icon, its "
+    .. "own countdown and its own time in seconds (%d at least): it lights up when that message is ready, and a click "
+    .. "posts it. The post key posts the one that has waited longest. Click an icon here to pick another; until you "
+    .. "do, a message shows the profession it links. Untick a message to keep it without posting it."):format(
+    C.MIN_EVERY), "small"))
   messageHint:SetPoint("TOPLEFT", messageLabel, "BOTTOMLEFT", 0, -4)
   messageHint:SetWidth(WIDTH)
   messageHint:SetWordWrap(true)
@@ -318,7 +319,8 @@ local function Build()
     Refresh()
   end)
   local postNote = Muted(Label(content, "The game sends a Trade chat message only when you click or press a key, so "
-    .. "the button by your character lights up when it's time and you post with one click.", "small"))
+    .. "a message's button by your character lights up when it's ready and you post it with one click. Post now sends "
+    .. "the one that has waited longest.", "small"))
   postNote:SetPoint("LEFT", post, "RIGHT", 10, 0)
   postNote:SetWidth(WIDTH - 120)
   postNote:SetWordWrap(true)
@@ -342,7 +344,8 @@ local function Build()
     { "sound", "Play a sound when it's time to post" },
     { "remind", "Say in chat when it's time to post" },
     { "onlyCities", "Only show the button in cities" },
-    { "locked", "Lock the button in place" },
+    { "locked", "Lock the buttons in place" },
+    { "column", "Stack the buttons in a column" },
   }) do
     local check = T.Check(content, option[2])
     check.key, check.char = option[1], option[3]
@@ -397,7 +400,7 @@ local function Build()
   keyHint:SetPoint("TOPLEFT", keyLabel, "BOTTOMLEFT", 0, -10)
   keyHint:SetWidth(WIDTH - 320)
   keyHint:SetWordWrap(true)
-  local reset = T.Button(content, 150, 22, "Put the button back")
+  local reset = T.Button(content, 150, 22, "Put the buttons back")
   reset:SetPoint("TOPLEFT", keyHint, "BOTTOMLEFT", 0, -14)
   reset:SetScript("OnClick", C.ResetPlace)
 end
@@ -451,7 +454,7 @@ SlashCmdList.TYLESSERTRADECRIER = function(msg)
   elseif command == "feedback" then
     T.ShowFeedback()
   elseif not C.Command(command) then
-    C.Say("/crier opens the options. /crier post posts the next message when it's time, /crier pause | resume, "
-      .. "/crier status, /crier reset puts the button back, /crier feedback.")
+    C.Say("/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, "
+      .. "/crier status, /crier reset puts the buttons back, /crier feedback.")
   end
 end
