@@ -10,7 +10,7 @@ local C = ns.crier
 local WIDTH = 560
 local INSERT_INDENT = 92 -- the insert buttons start right of "Put in a link:"
 local ROW = 28 -- one message row
-local BASE_HEIGHT = 600 -- the page below and above the message rows
+local BASE_HEIGHT = 620 -- the page below and above the message rows (with the lines between its groups)
 local panel, view
 
 local function Label(parent, text, size)
@@ -300,8 +300,11 @@ local function Build()
   hint:SetWidth(WIDTH)
   hint:SetWordWrap(true)
 
+  -- lines between the page's groups (2026-11-28, the user's request: the sections ran together)
+  local previewLine = T.Divider(content, WIDTH, 13)
+  previewLine:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -6)
   view.previewLabel = Label(content, L["In chat it reads"])
-  view.previewLabel:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -14)
+  view.previewLabel:SetPoint("TOPLEFT", previewLine, "BOTTOMLEFT", 0, -6)
   view.count = Label(content, "", "small")
   view.count:SetPoint("LEFT", view.previewLabel, "RIGHT", 10, 0)
   view.preview = Label(content, "", "small")
@@ -328,8 +331,10 @@ local function Build()
   postNote:SetWordWrap(true)
 
   -- the channel
+  local buttonsLine = T.Divider(content, WIDTH, 13)
+  buttonsLine:SetPoint("TOPLEFT", post, "BOTTOMLEFT", 0, -10)
   local channelLabel = Label(content, L["Channel"])
-  channelLabel:SetPoint("TOPLEFT", post, "BOTTOMLEFT", 0, -22)
+  channelLabel:SetPoint("TOPLEFT", buttonsLine, "BOTTOMLEFT", 0, -8)
   view.channel = T.Button(content, 130, 20, "")
   view.channel:SetPoint("LEFT", channelLabel, "RIGHT", 10, 0)
   view.channel:SetScript("OnClick", function()
@@ -418,19 +423,13 @@ local function CreateOptions()
     end
     Refresh()
   end)
-  if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
-    local category = Settings.RegisterCanvasLayoutCategory(panel, ns.TITLE)
-    Settings.RegisterAddOnCategory(category)
-    ns.optionsCategory = category
-  end
+  -- shown in Tylesser's own settings window (Tylesser.lua T.RegisterOptions, 2026-11-28)
+  ns.optionsCategory = ns.T.RegisterOptions(panel, ns.TITLE)
   ns.panel = panel
 end
 
 function ns.OpenOptions()
-  if ns.optionsCategory and Settings and Settings.OpenToCategory then
-    local id = ns.optionsCategory.GetID and ns.optionsCategory:GetID() or ns.optionsCategory.ID
-    Settings.OpenToCategory(id)
-  end
+  ns.T.OpenOptions(ns.optionsCategory)
 end
 
 -- the page follows the button's state (the countdown, a post made with the key)

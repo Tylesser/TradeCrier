@@ -26,7 +26,7 @@ with your **profession links**, and while you are in a city with Trade chat each
 
 ## Usage
 
-- Esc > Options > AddOns > **Tylesser - Trade Crier**, or `/crier`.
+- `/crier`, or Esc > Options > AddOns > **Tylesser** > Open Tylesser settings. The options open in Tylesser's own settings window.
 - Click a message's button to post it, right-click for the options, Shift-right-click to pause, drag to move the buttons.
 - `/crier post` posts the message that has waited longest, `/crier pause` / `/crier resume`, `/crier status`, `/crier reset` puts the buttons back.
 
