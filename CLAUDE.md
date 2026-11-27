@@ -20,6 +20,13 @@ A message with the character's profession links in Trade chat, again every few m
   the first profession it links). A button per message (`TradeCrierButton`, `..2`, ...) in the bar
   `TradeCrierButtonBar`; the key clicks `TradeCrierButtonKey`, which posts `C.NextMessage()`. 1.0's single `message` + `interval` minutes move
   into the list on first use. Details in Codex's CLAUDE.md (Modules/Crier).
+- Cities (2026-11-27, GitHub issue #1): `message.city` = an area ID from `C.CITIES` (the six AreaTable rows flagged
+  as capitals on Forever: 1519 Stormwind, 1537 Ironforge, 1657 Darnassus, 1637 Orgrimmar, 1638 Thunder Bluff, 1497
+  Undercity; names from `C_Map.GetAreaInfo`, English as fallback) or a zone name (a city with Trade chat not in the
+  list, offered while you are there); compared with `GetRealZoneText()` (never when secret). Another city's message
+  is "elsewhere": no button, skipped by `C.NextMessage`, `C.Post(i)` refuses it; only those = state "elsewhere".
+  `C.ShowCityPicker` / `C.CityButton` / `C.PaintCityButton` live in Crier.lua so both hosts' rows share them. The
+  teleport icons (SpellMisc of Teleport: <city>, files checked in Forever's list) are also icon choices.
 - `Options.lua`: the options page (T kit, in a scroll frame since the message list grows) and `/crier`.
 - Test: `node tools/harness/run.js tc_test.lua E:/Games/Wow/Addons/TradeCrier` (from tools/harness).
 - GitHub Tylesser/TradeCrier, CurseForge 1831458, Wago BKpEyRGE (slug tylesser-trade-crier), all made 2026-11-26.

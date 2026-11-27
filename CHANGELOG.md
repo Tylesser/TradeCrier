@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+
+- **A message for one city only**: the new city button next to a message's icon picks the city it is for (or any city). Its button then shows only there, and the post key skips it elsewhere, so you can write a different message for each city you trade in.
+- **City icons**: the icon picker has the six capitals' teleport icons, so a message's button can show which city it is for.
+  ([#1](https://github.com/Tylesser/TradeCrier/issues/1))
+
 ## 1.2.0
 
 - **A button per message** by your character, each with its own icon, countdown and glow. Click the one you want to post; the post key still posts the one that has waited longest. The buttons sit side by side (or in a column: "Stack the buttons in a column"), and dragging any of them moves them all.

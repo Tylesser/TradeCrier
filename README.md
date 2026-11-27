@@ -16,6 +16,8 @@ with your **profession links**, and while you are in a city with Trade chat each
   chat line when one is ready, if you like. Untick a message to keep it without posting it. Posts go to
   **Trade** or **Trade (Services)**.
 - **An icon per message**: until you pick one, a message takes the icon of the profession it links (`<Tailoring>` = Tailoring's).
+  The picker also has the capitals' teleport icons.
+- **A message for one city**, if you like: pick the city next to the message's icon, and its button shows only there.
 - **One click posts it.** The game only sends a Trade chat message when you click or press a key, so the addon never
   posts on its own: click the button, press the key you picked, or type `/crier post`.
 - **Only where it makes sense**: the button shows in the capital cities (where Trade chat is), and you can pause it

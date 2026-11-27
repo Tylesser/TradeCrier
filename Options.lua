@@ -33,6 +33,8 @@ local function RowState(message)
     return "off", T.MUTED
   elseif state == "long" then
     return "too long", { 1, 0.3, 0.3 }
+  elseif state == "elsewhere" then
+    return "elsewhere", T.MUTED
   end
   local wait = C.WaitFor(message)
   if wait > 0 then
@@ -63,6 +65,7 @@ local function Refresh()
       row.on:SetChecked(not message.off)
       row.pick.icon:SetTexture(C.MessageIcon(message))
       row.pick.icon:SetDesaturated(message.off and true or false)
+      C.PaintCityButton(row.city, message)
       local text, color = RowState(message)
       row.state:SetText(text)
       row.state:SetTextColor(color[1], color[2], color[3])
@@ -127,7 +130,7 @@ local function Insert(word)
   box:Insert(word)
 end
 
--- One message row: on/off, the text, its seconds, when it goes next, remove.
+-- One message row: on/off, its icon, its city, the text, its seconds, when it goes next, remove.
 local function MessageRow(parent, index)
   local row = CreateFrame("Frame", nil, parent)
   row:SetSize(WIDTH, ROW)
@@ -201,7 +204,10 @@ local function MessageRow(parent, index)
   row.pick:SetScript("OnClick", function(self)
     C.ShowIconPicker(self, index, Refresh)
   end)
-  row.box:SetPoint("LEFT", row.pick, "RIGHT", 10, 0)
+  -- the city it is for (TradeCrier issue #1): any, or one where its button shows
+  row.city = C.CityButton(row, index, Refresh)
+  row.city:SetPoint("LEFT", row.pick, "RIGHT", 4, 0)
+  row.box:SetPoint("LEFT", row.city, "RIGHT", 10, 0)
   row.box:SetPoint("RIGHT", every, "LEFT", -10, 0)
   row.box:SetAutoFocus(false)
   row.box:SetMaxLetters(C.MAX_LENGTH)

@@ -35,7 +35,8 @@ C.DEFAULTS = {
 }
 C.CHAR_DEFAULTS = {
   paused = false,
-  -- messages = { { text, every = seconds, off = true or nil, icon = path or nil (automatic), last = time() }, ... }
+  -- messages = { { text, every = seconds, off = true or nil, icon = path or nil (automatic), last = time(),
+  --   city = area ID or zone name or nil (any city) }, ... }
   -- lastPost = time() (any message)
 }
 C.CHANNELS = {
@@ -48,6 +49,21 @@ C.MAX_EVERY = 86400
 C.MAX_MESSAGES = 8
 C.SIZE = 40
 C.ICON = "Interface\\Icons\\INV_Misc_Note_01"
+C.ANY_CITY_ICON = "Interface\\Icons\\INV_Misc_Map_01"
+C.OTHER_CITY_ICON = "Interface\\Icons\\Ability_TownWatch"
+
+-- The capitals with Trade chat (Forever's AreaTable: the six areas flagged as capitals), by area ID, with the icon of
+-- the mage's teleport there (SpellMisc of Teleport: Stormwind ...; the files are in Forever's file list). A message
+-- can be for one city only (2026-11-27, TradeCrier issue #1: not everyone travels between the cities). Names come
+-- from the game in its own language (C_Map.GetAreaInfo); the English ones only when it answers nothing.
+C.CITIES = {
+  { area = 1519, name = "Stormwind City", icon = "Interface\\Icons\\Spell_Arcane_TeleportStormWind" },
+  { area = 1537, name = "Ironforge", icon = "Interface\\Icons\\Spell_Arcane_TeleportIronForge" },
+  { area = 1657, name = "Darnassus", icon = "Interface\\Icons\\Spell_Arcane_TeleportDarnassus" },
+  { area = 1637, name = "Orgrimmar", icon = "Interface\\Icons\\Spell_Arcane_TeleportOrgrimmar" },
+  { area = 1638, name = "Thunder Bluff", icon = "Interface\\Icons\\Spell_Arcane_TeleportThunderBluff" },
+  { area = 1497, name = "Undercity", icon = "Interface\\Icons\\Spell_Arcane_TeleportUnderCity" },
+}
 
 local function Fill(target, defaults)
   for key, value in pairs(defaults) do
@@ -137,6 +153,93 @@ local function Ask(fn, ...)
   local ok, a, b, c, d, e, f, g = pcall(fn, ...)
   if ok then
     return a, b, c, d, e, f, g
+  end
+end
+
+-- A string we may read and compare (not a secret value), or nil.
+local function PlainText(value)
+  if type(value) == "string" and (not canaccessvalue or canaccessvalue(value)) and value ~= "" then
+    return value
+  end
+end
+
+-- Cities -------------------------------------------------------------------------------------------------
+
+local function CityDef(city)
+  for _, def in ipairs(C.CITIES) do
+    if def.area == city then
+      return def
+    end
+  end
+end
+
+-- A message's city as the game names it: message.city is an area ID from C.CITIES, or a zone name (a city with
+-- Trade chat that isn't in the list, picked while there). Nil = any city.
+function C.CityName(city)
+  if type(city) == "number" then
+    local name = C_Map and PlainText(Ask(C_Map.GetAreaInfo, city))
+    local def = CityDef(city)
+    return name or (def and def.name)
+  end
+  return PlainText(city)
+end
+
+-- The icon of a message's city: its teleport's, a map for any city, a town for another one.
+function C.CityIcon(city)
+  local def = type(city) == "number" and CityDef(city)
+  if def then
+    return def.icon
+  end
+  return C.CityName(city) and C.OTHER_CITY_ICON or C.ANY_CITY_ICON
+end
+
+-- The zone you are in (GetRealZoneText: the city, not the street), or nil.
+function C.Here()
+  return PlainText(Ask(GetRealZoneText))
+end
+
+-- Whether a message may go where you are: it is for any city, or you are in its city.
+function C.InItsCity(message)
+  local name = message and C.CityName(message.city)
+  if not name then
+    return true
+  end
+  return C.Here() == name
+end
+
+-- The cities to pick from for a message: any (false), the capitals, then the city you are in and the one picked when
+-- they aren't in the list. { { city = value or false, name = text, icon = path }, ... }
+function C.CityChoices(message)
+  local out = { { city = false, name = "Any city", icon = C.ANY_CITY_ICON } }
+  local names = {}
+  for _, def in ipairs(C.CITIES) do
+    local name = C.CityName(def.area)
+    names[name] = true
+    out[#out + 1] = { city = def.area, name = name, icon = def.icon }
+  end
+  local extra = {}
+  if message and type(message.city) == "string" and C.CityName(message.city) then
+    extra[#extra + 1] = message.city
+  end
+  local here = C.Here()
+  if here and C.FindChannel() then
+    extra[#extra + 1] = here
+  end
+  for _, name in ipairs(extra) do
+    if not names[name] then
+      names[name] = true
+      out[#out + 1] = { city = name, name = name, icon = C.OTHER_CITY_ICON }
+    end
+  end
+  return out
+end
+
+-- Sets a message's city (nil or false = any city).
+function C.SetCity(index, city)
+  local message = C.Messages()[index]
+  if message then
+    message.city = city or nil
+    C.Refresh()
   end
 end
 
@@ -269,13 +372,16 @@ function C.WaitFor(message)
   return math.max(0, last + C.ClampEvery(message.every) - Now())
 end
 
--- What a message is on its own: "empty", "off", "long" or "ok", and its text as posted (and the unknown codes).
+-- What a message is on its own: "empty", "off", "elsewhere" (for another city), "long" or "ok", and its text as
+-- posted (and the unknown codes).
 function C.MessageState(message)
   local text, unknown = C.Expand(message.text)
   if text == "" then
     return "empty", text, unknown
   elseif message.off then
     return "off", text, unknown
+  elseif not C.InItsCity(message) then
+    return "elsewhere", text, unknown
   elseif #text > C.MAX_LENGTH then
     return "long", text, unknown
   end
@@ -308,16 +414,20 @@ function C.NextIn()
   return wait or 0
 end
 
--- "message" (nothing to post), "long", "paused", "nochannel", "lockdown", "wait", "due".
+-- "message" (nothing to post), "elsewhere" (only messages for other cities), "long", "paused", "nochannel",
+-- "lockdown", "wait", "due".
 function C.State()
   local char = C.Char()
   if not C.NextMessage() then
+    local elsewhere = false
     for _, message in ipairs(C.Messages()) do
-      if C.MessageState(message) == "long" then
+      local kind = C.MessageState(message)
+      if kind == "long" then
         return "long"
       end
+      elsewhere = elsewhere or kind == "elsewhere"
     end
-    return "message"
+    return elsewhere and "elsewhere" or "message"
   elseif char.paused then
     return "paused"
   elseif not C.FindChannel() then
@@ -343,6 +453,10 @@ function C.StatusText()
     return "Write a message first."
   elseif state == "long" then
     return ("Your message is too long with its links; the game takes %d letters."):format(C.MAX_LENGTH)
+  elseif state == "elsewhere" then
+    local here = C.Here()
+    return here and ("No message for %s: yours are for other cities."):format(here)
+      or "Your messages are for other cities."
   elseif state == "paused" then
     return "Paused on this character."
   elseif state == "nochannel" then
@@ -377,6 +491,8 @@ function C.Post(index)
     if state == "long" then
       return No(("Message %d is too long with its links; the game takes %d letters. Make it shorter."):format(index,
         C.MAX_LENGTH))
+    elseif state == "elsewhere" then
+      return No(("Message %d is for %s only."):format(index, C.CityName(message.city) or "another city"))
     elseif state ~= "ok" then
       return No(("Message %d has nothing to post."):format(index))
     end
@@ -384,9 +500,12 @@ function C.Post(index)
   else
     index, message, wait = C.NextMessage()
     if not index then
-      if C.State() == "long" then
+      local state = C.State()
+      if state == "long" then
         return No(("Your message is too long with its links; the game takes %d letters. Make it shorter."):format(
           C.MAX_LENGTH))
+      elseif state == "elsewhere" then
+        return No(C.StatusText())
       end
       return No("Write a message first: " .. (C.COMMAND or "the options page") .. ".")
     end
@@ -479,6 +598,10 @@ local function ShowTooltip(self)
   GameTooltip:AddLine((C.BRAND or "Trade Crier") .. (many and (": message %d"):format(self.index) or ""))
   GameTooltip:AddLine(ButtonStatus(self), 1, 1, 1, true)
   local message = C.Messages()[self.index]
+  local city = message and C.CityName(message.city)
+  if city then
+    GameTooltip:AddLine(("For %s only."):format(city), 1, 1, 1, true)
+  end
   local text = message and C.Expand(message.text) or ""
   if text ~= "" then
     GameTooltip:AddLine(" ")
@@ -659,6 +782,9 @@ C.ICON_CHOICES = {
 for index, name in ipairs(C.ICON_CHOICES) do
   C.ICON_CHOICES[index] = "Interface\\Icons\\" .. name
 end
+for _, def in ipairs(C.CITIES) do -- the cities' teleports (TradeCrier issue #1)
+  C.ICON_CHOICES[#C.ICON_CHOICES + 1] = def.icon
+end
 
 function C.IconChoices()
   local out, seen = {}, {}
@@ -687,7 +813,142 @@ function C.SetIcon(index, icon)
 end
 
 local ICON_CELL, ICON_COLUMNS = 30, 8
-local picker
+local picker, cityPicker
+
+-- A dark box with a thin accent border over the page, closed by Escape: the icon and city pickers.
+local function PickerPanel(name)
+  local panel = CreateFrame("Frame", name, UIParent)
+  panel:SetFrameStrata("DIALOG")
+  panel:SetClampedToScreen(true)
+  panel:EnableMouse(true)
+  local fill = panel:CreateTexture(nil, "BACKGROUND")
+  fill:SetAllPoints()
+  fill:SetColorTexture(0.05, 0.05, 0.06, 0.96)
+  local accent = C.Accent and C.Accent() or { 1, 0.82, 0 }
+  for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+    local line = panel:CreateTexture(nil, "BORDER")
+    line:SetColorTexture(accent[1], accent[2], accent[3], 0.8)
+    if side == "TOP" or side == "BOTTOM" then
+      line:SetPoint(side .. "LEFT")
+      line:SetPoint(side .. "RIGHT")
+      line:SetHeight(1)
+    else
+      line:SetPoint("TOP" .. side)
+      line:SetPoint("BOTTOM" .. side)
+      line:SetWidth(1)
+    end
+  end
+  if type(UISpecialFrames) == "table" then
+    table.insert(UISpecialFrames, name)
+  end
+  return panel
+end
+
+local CITY_ROW, CITY_WIDTH = 22, 180
+
+-- A list of cities beside `anchor` for message `index` (C.CityChoices): a click sets the message's city and closes
+-- it; `after` runs after a pick. Clicking the anchor again or Escape closes it.
+function C.ShowCityPicker(anchor, index, after)
+  if cityPicker and cityPicker:IsShown() and cityPicker.index == index and cityPicker.anchor == anchor then
+    cityPicker:Hide()
+    return
+  end
+  if picker then
+    picker:Hide()
+  end
+  if not cityPicker then
+    cityPicker = PickerPanel(C.BUTTON_NAME .. "CityPicker")
+    cityPicker.rows = {}
+  end
+  cityPicker.index, cityPicker.anchor, cityPicker.after = index, anchor, after
+  local message = C.Messages()[index]
+  local choices = C.CityChoices(message)
+  local accent = C.Accent and C.Accent() or { 1, 0.82, 0 }
+  for slot, choice in ipairs(choices) do
+    local row = cityPicker.rows[slot]
+    if not row then
+      row = CreateFrame("Button", nil, cityPicker)
+      row:SetSize(CITY_WIDTH - 12, CITY_ROW)
+      row.mark = row:CreateTexture(nil, "BACKGROUND")
+      row.mark:SetAllPoints()
+      row.mark:SetColorTexture(accent[1], accent[2], accent[3], 0.35)
+      local hover = row:CreateTexture(nil, "HIGHLIGHT")
+      hover:SetAllPoints()
+      hover:SetColorTexture(1, 1, 1, 0.12)
+      row.icon = row:CreateTexture(nil, "ARTWORK")
+      row.icon:SetSize(CITY_ROW - 4, CITY_ROW - 4)
+      row.icon:SetPoint("LEFT", 2, 0)
+      row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+      row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+      row.text:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+      row.text:SetPoint("RIGHT", -4, 0)
+      row.text:SetJustifyH("LEFT")
+      row:SetScript("OnClick", function(self)
+        C.SetCity(cityPicker.index, self.city)
+        cityPicker:Hide()
+        if cityPicker.after then
+          cityPicker.after()
+        end
+      end)
+      cityPicker.rows[slot] = row
+    end
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", 6, -6 - (slot - 1) * CITY_ROW)
+    row.city = choice.city or nil
+    row.icon:SetTexture(choice.icon)
+    row.text:SetText(choice.name)
+    local picked = message and ((choice.city or nil) == message.city)
+    row.mark:SetShown(picked and true or false)
+    row:Show()
+  end
+  for slot = #choices + 1, #cityPicker.rows do
+    cityPicker.rows[slot]:Hide()
+  end
+  cityPicker:SetSize(CITY_WIDTH, 12 + #choices * CITY_ROW)
+  cityPicker:ClearAllPoints()
+  cityPicker:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
+  cityPicker:Show()
+  C.cityPicker = cityPicker
+end
+
+-- The small button of an options row that shows and picks message `index`'s city (both hosts' pages use it);
+-- C.PaintCityButton repaints it.
+function C.CityButton(parent, index, after)
+  local button = CreateFrame("Button", nil, parent)
+  button:SetSize(22, 22)
+  button.index = index
+  button.icon = button:CreateTexture(nil, "ARTWORK")
+  button.icon:SetAllPoints()
+  button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  local hover = button:CreateTexture(nil, "HIGHLIGHT")
+  hover:SetAllPoints()
+  hover:SetColorTexture(1, 1, 1, 0.2)
+  button:SetScript("OnClick", function(self)
+    C.ShowCityPicker(self, self.index, after)
+  end)
+  button:SetScript("OnEnter", function(self)
+    if not GameTooltip then
+      return
+    end
+    local message = C.Messages()[self.index]
+    local city = message and C.CityName(message.city)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(city and ("For %s only"):format(city) or "For any city")
+    GameTooltip:AddLine("Click: pick the city this message is for. Its button shows only there.", 1, 1, 1, true)
+    GameTooltip:Show()
+  end)
+  button:SetScript("OnLeave", function()
+    if GameTooltip then
+      GameTooltip:Hide()
+    end
+  end)
+  return button
+end
+
+function C.PaintCityButton(button, message)
+  button.icon:SetTexture(C.CityIcon(message and message.city))
+  button.icon:SetDesaturated(not (message and C.CityName(message.city)))
+end
 
 -- A small grid of icons beside `anchor` for message `index`: "Auto" first, then C.IconChoices(). A click picks and
 -- closes it; `after` runs after a pick (the page repaints). Clicking the anchor again or Escape closes it.
@@ -696,32 +957,12 @@ function C.ShowIconPicker(anchor, index, after)
     picker:Hide()
     return
   end
+  if cityPicker then
+    cityPicker:Hide()
+  end
   if not picker then
-    picker = CreateFrame("Frame", C.BUTTON_NAME .. "IconPicker", UIParent)
-    picker:SetFrameStrata("DIALOG")
-    picker:SetClampedToScreen(true)
-    picker:EnableMouse(true)
-    local fill = picker:CreateTexture(nil, "BACKGROUND")
-    fill:SetAllPoints()
-    fill:SetColorTexture(0.05, 0.05, 0.06, 0.96)
-    local accent = C.Accent and C.Accent() or { 1, 0.82, 0 }
-    for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-      local line = picker:CreateTexture(nil, "BORDER")
-      line:SetColorTexture(accent[1], accent[2], accent[3], 0.8)
-      if side == "TOP" or side == "BOTTOM" then
-        line:SetPoint(side .. "LEFT")
-        line:SetPoint(side .. "RIGHT")
-        line:SetHeight(1)
-      else
-        line:SetPoint("TOP" .. side)
-        line:SetPoint("BOTTOM" .. side)
-        line:SetWidth(1)
-      end
-    end
+    picker = PickerPanel(C.BUTTON_NAME .. "IconPicker")
     picker.cells = {}
-    if type(UISpecialFrames) == "table" then
-      table.insert(UISpecialFrames, picker:GetName())
-    end
   end
   picker.index, picker.anchor = index, anchor
   local message = C.Messages()[index]
