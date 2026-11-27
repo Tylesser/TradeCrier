@@ -1,4 +1,5 @@
 local addonName, ns = ...
+local L = ns.L
 
 -- Trade Crier (2026-11-26, the user's request): your own messages with your profession links in Trade chat, each
 -- again after its own time (in seconds, the user's wish 2026-11-26) while you are in a city. This file is shared byte
@@ -36,7 +37,8 @@ C.DEFAULTS = {
 C.CHAR_DEFAULTS = {
   paused = false,
   -- messages = { { text, every = seconds, off = true or nil, icon = path or nil (automatic), last = time(),
-  --   city = area ID or zone name or nil (any city) }, ... }
+  --   city = area ID or zone name or nil (any city), channel = C.CHANNELS key or nil (the one picked for all),
+  --   hours = { from, to } or nil (any time) }, ... }
   -- lastPost = time() (any message)
 }
 C.CHANNELS = {
@@ -210,7 +212,7 @@ end
 -- The cities to pick from for a message: any (false), the capitals, then the city you are in and the one picked when
 -- they aren't in the list. { { city = value or false, name = text, icon = path }, ... }
 function C.CityChoices(message)
-  local out = { { city = false, name = "Any city", icon = C.ANY_CITY_ICON } }
+  local out = { { city = false, name = L["Any city"], icon = C.ANY_CITY_ICON } }
   local names = {}
   for _, def in ipairs(C.CITIES) do
     local name = C.CityName(def.area)
@@ -241,6 +243,137 @@ function C.SetCity(index, city)
     message.city = city or nil
     C.Refresh()
   end
+end
+
+-- A message's channel (2026-11-27, the user's "do 5"): its own (message.channel, a C.CHANNELS key), else the one
+-- picked for all messages.
+function C.MessageChannel(message)
+  local key = message and message.channel
+  if key and C.ChannelDef(key).key == key then
+    return key
+  end
+  return C.Settings().channel
+end
+
+function C.SetChannel(index, key)
+  local message = C.Messages()[index]
+  if message then
+    message.channel = key or nil
+    C.Refresh()
+  end
+end
+
+-- Hours (same day): message.hours = { from, to }, local whole hours 0-23; `to` is not included, and from > to runs
+-- past midnight (18 to 0 = the evening). The choices offered:
+C.HOURS = {
+  { from = 6, to = 12, name = "Mornings, 6:00 to 12:00" },
+  { from = 12, to = 18, name = "Afternoons, 12:00 to 18:00" },
+  { from = 18, to = 0, name = "Evenings, 18:00 to 0:00" },
+  { from = 0, to = 6, name = "Nights, 0:00 to 6:00" },
+}
+
+local function ValidHours(hours)
+  return type(hours) == "table" and type(hours.from) == "number" and type(hours.to) == "number"
+    and hours.from ~= hours.to
+end
+
+-- A choice's name as shown, in the client's language (read when shown, like C.ChannelName).
+function C.HoursName(def)
+  local shown = {
+    ["Mornings, 6:00 to 12:00"] = L["Mornings, 6:00 to 12:00"],
+    ["Afternoons, 12:00 to 18:00"] = L["Afternoons, 12:00 to 18:00"],
+    ["Evenings, 18:00 to 0:00"] = L["Evenings, 18:00 to 0:00"],
+    ["Nights, 0:00 to 6:00"] = L["Nights, 0:00 to 6:00"],
+  }
+  return shown[def.name] or def.name
+end
+
+function C.HoursText(hours)
+  if not ValidHours(hours) then
+    return nil
+  end
+  return L["%d:00 to %d:00"]:format(hours.from, hours.to)
+end
+
+-- The local hour now (0-23), or nil.
+function C.Hour()
+  local ok, now = pcall(date, "*t")
+  return ok and type(now) == "table" and tonumber(now.hour) or nil
+end
+
+-- Whether a message may go at this hour: it has no hours, or now is inside them.
+function C.InItsHours(message)
+  local hours = message and message.hours
+  if not ValidHours(hours) then
+    return true
+  end
+  local hour = C.Hour()
+  if not hour then
+    return true
+  end
+  if hours.from < hours.to then
+    return hour >= hours.from and hour < hours.to
+  end
+  return hour >= hours.from or hour < hours.to
+end
+
+function C.SetHours(index, hours)
+  local message = C.Messages()[index]
+  if message then
+    message.hours = ValidHours(hours) and { from = hours.from, to = hours.to } or nil
+    C.Refresh()
+  end
+end
+
+-- Everything the city button's list offers for a message, in order: headings, the cities (C.CityChoices), the
+-- channels and the hours. { { kind = "heading" | "city" | "channel" | "hours", name, icon, value, picked } }
+function C.WhereWhenChoices(message)
+  local out = { { kind = "heading", name = L["City"] } }
+  for _, choice in ipairs(C.CityChoices(message)) do
+    out[#out + 1] = { kind = "city", name = choice.name, icon = choice.icon, value = choice.city or false,
+      picked = (choice.city or nil) == (message and message.city) }
+  end
+  out[#out + 1] = { kind = "heading", name = L["Channel"] }
+  local own = message and message.channel and C.ChannelDef(message.channel).key == message.channel
+    and message.channel or nil
+  out[#out + 1] = { kind = "channel", value = false, picked = own == nil,
+    name = L["As for all (%s)"]:format(C.ChannelName(C.Settings().channel)) }
+  for _, def in ipairs(C.CHANNELS) do
+    out[#out + 1] = { kind = "channel", value = def.key, name = C.ChannelName(def.key), picked = own == def.key }
+  end
+  out[#out + 1] = { kind = "heading", name = L["Time of day (your clock)"] }
+  local hours = message and ValidHours(message.hours) and message.hours
+  out[#out + 1] = { kind = "hours", value = false, name = L["Any time"], picked = not hours }
+  local known = false
+  for _, def in ipairs(C.HOURS) do
+    local picked = hours and hours.from == def.from and hours.to == def.to or false
+    known = known or picked
+    out[#out + 1] = { kind = "hours", value = { from = def.from, to = def.to }, name = C.HoursName(def),
+      picked = picked }
+  end
+  if hours and not known then
+    out[#out + 1] = { kind = "hours", value = { from = hours.from, to = hours.to }, name = C.HoursText(hours),
+      picked = true }
+  end
+  return out
+end
+
+-- The message's conditions as lines ("For Ironforge only.", "In Trade (Services).", "Only 18:00 to 0:00."), for
+-- tooltips.
+function C.ConditionLines(message)
+  local lines = {}
+  local city = message and C.CityName(message.city)
+  if city then
+    lines[#lines + 1] = L["For %s only."]:format(city)
+  end
+  if message and message.channel and C.ChannelDef(message.channel).key == message.channel then
+    lines[#lines + 1] = L["In %s."]:format(C.ChannelName(message.channel))
+  end
+  local hours = message and C.HoursText(message.hours)
+  if hours then
+    lines[#lines + 1] = L["Only %s."]:format(hours)
+  end
+  return lines
 end
 
 -- Professions --------------------------------------------------------------------------------------------
@@ -329,6 +462,14 @@ function C.ChannelDef(key)
   return C.CHANNELS[1]
 end
 
+-- A channel's name as shown, in the client's language (def.name stays English; channels are found by zone ID).
+-- Read when shown, so a Locales file loaded after this one still counts.
+function C.ChannelName(key)
+  local name = C.ChannelDef(key).name
+  local shown = { ["Trade"] = L["Trade"], ["Trade (Services)"] = L["Trade (Services)"] }
+  return shown[name] or name
+end
+
 -- The joined channel's number and full name ("Trade - City") for the chosen channel, or nil.
 function C.FindChannel(key)
   local def = C.ChannelDef(key or C.Settings().channel)
@@ -372,8 +513,8 @@ function C.WaitFor(message)
   return math.max(0, last + C.ClampEvery(message.every) - Now())
 end
 
--- What a message is on its own: "empty", "off", "elsewhere" (for another city), "long" or "ok", and its text as
--- posted (and the unknown codes).
+-- What a message is on its own: "empty", "off", "elsewhere" (for another city), "later" (for other hours), "long"
+-- or "ok", and its text as posted (and the unknown codes).
 function C.MessageState(message)
   local text, unknown = C.Expand(message.text)
   if text == "" then
@@ -382,6 +523,8 @@ function C.MessageState(message)
     return "off", text, unknown
   elseif not C.InItsCity(message) then
     return "elsewhere", text, unknown
+  elseif not C.InItsHours(message) then
+    return "later", text, unknown
   elseif #text > C.MAX_LENGTH then
     return "long", text, unknown
   end
@@ -414,23 +557,25 @@ function C.NextIn()
   return wait or 0
 end
 
--- "message" (nothing to post), "elsewhere" (only messages for other cities), "long", "paused", "nochannel",
--- "lockdown", "wait", "due".
+-- "message" (nothing to post), "elsewhere" (only messages for other cities), "later" (only for other hours),
+-- "long", "paused", "nochannel", "lockdown", "wait", "due".
 function C.State()
   local char = C.Char()
-  if not C.NextMessage() then
-    local elsewhere = false
+  local _, nextMessage = C.NextMessage()
+  if not nextMessage then
+    local elsewhere, later = false, false
     for _, message in ipairs(C.Messages()) do
       local kind = C.MessageState(message)
       if kind == "long" then
         return "long"
       end
       elsewhere = elsewhere or kind == "elsewhere"
+      later = later or kind == "later"
     end
-    return elsewhere and "elsewhere" or "message"
+    return elsewhere and "elsewhere" or later and "later" or "message"
   elseif char.paused then
     return "paused"
-  elseif not C.FindChannel() then
+  elseif not C.FindChannel(C.MessageChannel(nextMessage)) then
     return "nochannel"
   elseif C.Locked() then
     return "lockdown"
@@ -448,29 +593,45 @@ end
 -- One line on what happens next, for the tooltip and the options page.
 function C.StatusText()
   local state = C.State()
-  local channel = C.ChannelDef(C.Settings().channel).name
+  local _, nextMessage = C.NextMessage()
+  local channel = C.ChannelName(C.MessageChannel(nextMessage))
   if state == "message" then
-    return "Write a message first."
+    return L["Write a message first."]
   elseif state == "long" then
-    return ("Your message is too long with its links; the game takes %d letters."):format(C.MAX_LENGTH)
+    return L["Your message is too long with its links; the game takes %d letters."]:format(C.MAX_LENGTH)
   elseif state == "elsewhere" then
     local here = C.Here()
-    return here and ("No message for %s: yours are for other cities."):format(here)
-      or "Your messages are for other cities."
+    return here and L["No message for %s: yours are for other cities."]:format(here)
+      or L["Your messages are for other cities."]
+  elseif state == "later" then
+    return L["No message for this time of day: yours are for other hours."]
   elseif state == "paused" then
-    return "Paused on this character."
+    return L["Paused on this character."]
   elseif state == "nochannel" then
-    return ("No %s chat here: it is in the capital cities."):format(channel)
+    return L["No %s chat here: it is in the capital cities."]:format(channel)
   elseif state == "lockdown" then
-    return "The game doesn't let addons send chat right now."
+    return L["The game doesn't let addons send chat right now."]
   end
   local index = C.NextMessage()
-  local which = #C.Messages() > 1 and index and (" (message %d)"):format(index) or ""
+  local many = #C.Messages() > 1 and index
   if state == "wait" then
-    return ("Next post in %s%s."):format(C.Clock(C.NextIn()), which)
+    return C.NextPostText(C.NextIn(), many and index)
   end
-  return ("Time to post%s in %s: click %s button%s."):format(which, channel, which ~= "" and "its" or "the",
-    C.Settings().key and (" or press " .. C.Settings().key) or "")
+  local key = C.Settings().key
+  if many then
+    return key and L["Time to post (message %d) in %s: click its button or press %s."]:format(index, channel, key)
+      or L["Time to post (message %d) in %s: click its button."]:format(index, channel)
+  end
+  return key and L["Time to post in %s: click the button or press %s."]:format(channel, key)
+    or L["Time to post in %s: click the button."]:format(channel)
+end
+
+-- "Next post in 4:30." or, with several messages, "Next post in 4:30 (message 2)."
+function C.NextPostText(seconds, index)
+  if index then
+    return L["Next post in %s (message %d)."]:format(C.Clock(seconds), index)
+  end
+  return L["Next post in %s."]:format(C.Clock(seconds))
 end
 
 -- Posting (only from a click or a key press) -------------------------------------------------------------
@@ -489,12 +650,18 @@ function C.Post(index)
     message = list[index]
     local state = message and C.MessageState(message)
     if state == "long" then
-      return No(("Message %d is too long with its links; the game takes %d letters. Make it shorter."):format(index,
+      return No(L["Message %d is too long with its links; the game takes %d letters. Make it shorter."]:format(index,
         C.MAX_LENGTH))
     elseif state == "elsewhere" then
-      return No(("Message %d is for %s only."):format(index, C.CityName(message.city) or "another city"))
+      local city = C.CityName(message.city)
+      return No(city and L["Message %d is for %s only."]:format(index, city)
+        or L["Message %d is for another city only."]:format(index))
+    elseif state == "later" then
+      local hours = C.HoursText(message.hours)
+      return No(hours and L["Message %d goes only from %s."]:format(index, hours)
+        or L["Message %d goes only at other hours."]:format(index))
     elseif state ~= "ok" then
-      return No(("Message %d has nothing to post."):format(index))
+      return No(L["Message %d has nothing to post."]:format(index))
     end
     wait = C.WaitFor(message)
   else
@@ -502,37 +669,39 @@ function C.Post(index)
     if not index then
       local state = C.State()
       if state == "long" then
-        return No(("Your message is too long with its links; the game takes %d letters. Make it shorter."):format(
+        return No(L["Your message is too long with its links; the game takes %d letters. Make it shorter."]:format(
           C.MAX_LENGTH))
-      elseif state == "elsewhere" then
+      elseif state == "elsewhere" or state == "later" then
         return No(C.StatusText())
       end
-      return No("Write a message first: " .. (C.COMMAND or "the options page") .. ".")
+      return No(C.COMMAND and L["Write a message first: %s."]:format(C.COMMAND)
+        or L["Write a message first on the options page."])
     end
   end
   local text, unknown = C.Expand(message.text)
-  local id, name = C.FindChannel()
+  local channelKey = C.MessageChannel(message)
+  local id, name = C.FindChannel(channelKey)
   if not id then
-    return No(("No %s chat here: it is in the capital cities."):format(C.ChannelDef(C.Settings().channel).name))
+    return No(L["No %s chat here: it is in the capital cities."]:format(C.ChannelName(channelKey)))
   end
   if C.Locked() then
-    return No("The game doesn't let addons send chat right now.")
+    return No(L["The game doesn't let addons send chat right now."])
   end
   if wait > 0 then
-    return No(("Next post in %s%s."):format(C.Clock(wait), #list > 1 and (" (message %d)"):format(index) or ""))
+    return No(C.NextPostText(wait, #list > 1 and index))
   end
   local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
   if type(send) ~= "function" then
-    return No("The game has no way to send chat here.")
+    return No(L["The game has no way to send chat here."])
   end
   local ok, err = pcall(send, text, "CHANNEL", nil, id)
   if not ok then
-    return No("The game didn't send it: " .. tostring(err))
+    return No(L["The game didn't send it: %s"]:format(tostring(err)))
   end
   message.last = Now()
   char.lastPost = message.last
   if #unknown > 0 then
-    C.Say(("Posted, but %s matched none of your professions."):format(table.concat(unknown, ", ")))
+    C.Say(L["Posted, but %s matched none of your professions."]:format(table.concat(unknown, ", ")))
   end
   C.lastChannel = name
   C.Refresh()
@@ -577,13 +746,13 @@ end
 local function ButtonStatus(self)
   local state, index = self.state, self.index
   local message = C.Messages()[index]
-  local channel = C.ChannelDef(C.Settings().channel).name
+  local channel = C.ChannelName(C.MessageChannel(message))
   if state == "wait" and message then
-    return ("This one can go again in %s."):format(C.Clock(C.WaitFor(message)))
+    return L["This one can go again in %s."]:format(C.Clock(C.WaitFor(message)))
   elseif state == "due" then
-    return ("Ready to post in %s."):format(channel)
+    return L["Ready to post in %s."]:format(channel)
   elseif state == "long" then
-    return ("Too long with its links; the game takes %d letters."):format(C.MAX_LENGTH)
+    return L["Too long with its links; the game takes %d letters."]:format(C.MAX_LENGTH)
   end
   return C.StatusText()
 end
@@ -595,12 +764,12 @@ local function ShowTooltip(self)
   local settings = C.Settings()
   local many = #C.Messages() > 1
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-  GameTooltip:AddLine((C.BRAND or "Trade Crier") .. (many and (": message %d"):format(self.index) or ""))
+  local brand = C.BRAND or "Trade Crier"
+  GameTooltip:AddLine(many and L["%s: message %d"]:format(brand, self.index) or brand)
   GameTooltip:AddLine(ButtonStatus(self), 1, 1, 1, true)
   local message = C.Messages()[self.index]
-  local city = message and C.CityName(message.city)
-  if city then
-    GameTooltip:AddLine(("For %s only."):format(city), 1, 1, 1, true)
+  for _, line in ipairs(C.ConditionLines(message)) do
+    GameTooltip:AddLine(line, 1, 1, 1, true)
   end
   local text = message and C.Expand(message.text) or ""
   if text ~= "" then
@@ -608,15 +777,15 @@ local function ShowTooltip(self)
     GameTooltip:AddLine(text, 0.85, 0.85, 0.85, true)
   end
   GameTooltip:AddLine(" ")
-  GameTooltip:AddLine(many and "Click: post this message when it's ready" or "Click: post it when it's ready",
+  GameTooltip:AddLine(many and L["Click: post this message when it's ready"] or L["Click: post it when it's ready"],
     0.6, 0.6, 0.6)
   if settings.key then
-    GameTooltip:AddLine(settings.key .. (many and ": posts the one that has waited longest" or ": posts it too"),
-      0.6, 0.6, 0.6)
+    GameTooltip:AddLine((many and L["%s: posts the one that has waited longest"] or L["%s: posts it too"]):format(
+      settings.key), 0.6, 0.6, 0.6)
   end
-  GameTooltip:AddLine("Right-click: options. Shift-right-click: pause", 0.6, 0.6, 0.6)
+  GameTooltip:AddLine(L["Right-click: options. Shift-right-click: pause"], 0.6, 0.6, 0.6)
   if not settings.locked then
-    GameTooltip:AddLine("Drag: move", 0.6, 0.6, 0.6)
+    GameTooltip:AddLine(L["Drag: move"], 0.6, 0.6, 0.6)
   end
   GameTooltip:Show()
 end
@@ -846,8 +1015,82 @@ end
 
 local CITY_ROW, CITY_WIDTH = 22, 180
 
--- A list of cities beside `anchor` for message `index` (C.CityChoices): a click sets the message's city and closes
--- it; `after` runs after a pick. Clicking the anchor again or Escape closes it.
+-- Where and when message `index` goes, beside `anchor` (C.WhereWhenChoices: its city, channel and time of day,
+-- each a list under a heading; 2026-11-27): a click sets that one and marks it, the list stays open so the others
+-- can be set too; `after` runs after each pick. Clicking the anchor again or Escape closes it.
+local function PaintWhereWhen()
+  local message = C.Messages()[cityPicker.index]
+  local choices = C.WhereWhenChoices(message)
+  local accent = C.Accent and C.Accent() or { 1, 0.82, 0 }
+  for slot, choice in ipairs(choices) do
+    local row = cityPicker.rows[slot]
+    if not row then
+      row = CreateFrame("Button", nil, cityPicker)
+      row:SetSize(CITY_WIDTH - 12, CITY_ROW)
+      row.mark = row:CreateTexture(nil, "BACKGROUND")
+      row.mark:SetAllPoints()
+      row.mark:SetColorTexture(accent[1], accent[2], accent[3], 0.35)
+      row.hover = row:CreateTexture(nil, "HIGHLIGHT")
+      row.hover:SetAllPoints()
+      row.hover:SetColorTexture(1, 1, 1, 0.12)
+      row.icon = row:CreateTexture(nil, "ARTWORK")
+      row.icon:SetSize(CITY_ROW - 4, CITY_ROW - 4)
+      row.icon:SetPoint("LEFT", 2, 0)
+      row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+      row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+      row.text:SetPoint("RIGHT", -4, 0)
+      row.text:SetJustifyH("LEFT")
+      row:SetScript("OnClick", function(self)
+        local index = cityPicker.index
+        if self.kind == "city" then
+          C.SetCity(index, self.value)
+        elseif self.kind == "channel" then
+          C.SetChannel(index, self.value)
+        elseif self.kind == "hours" then
+          C.SetHours(index, self.value)
+        else
+          return
+        end
+        PaintWhereWhen()
+        if cityPicker.after then
+          cityPicker.after()
+        end
+      end)
+      cityPicker.rows[slot] = row
+    end
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", 6, -6 - (slot - 1) * CITY_ROW)
+    row.kind, row.value = choice.kind, choice.value
+    row.city = choice.kind == "city" and (choice.value or nil) or nil
+    row.text:ClearAllPoints()
+    row.text:SetPoint("RIGHT", -4, 0)
+    if choice.icon then
+      row.icon:SetTexture(choice.icon)
+      row.icon:Show()
+      row.text:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+    else
+      row.icon:Hide()
+      row.text:SetPoint("LEFT", choice.kind == "heading" and 2 or 8, 0)
+    end
+    row.text:SetText(choice.name)
+    if choice.kind == "heading" then
+      row.text:SetTextColor(accent[1], accent[2], accent[3])
+      row.hover:Hide()
+      row:EnableMouse(false)
+    else
+      row.text:SetTextColor(1, 1, 1)
+      row.hover:Show()
+      row:EnableMouse(true)
+    end
+    row.mark:SetShown(choice.picked and true or false)
+    row:Show()
+  end
+  for slot = #choices + 1, #cityPicker.rows do
+    cityPicker.rows[slot]:Hide()
+  end
+  cityPicker:SetSize(CITY_WIDTH, 12 + #choices * CITY_ROW)
+end
+
 function C.ShowCityPicker(anchor, index, after)
   if cityPicker and cityPicker:IsShown() and cityPicker.index == index and cityPicker.anchor == anchor then
     cityPicker:Hide()
@@ -861,50 +1104,7 @@ function C.ShowCityPicker(anchor, index, after)
     cityPicker.rows = {}
   end
   cityPicker.index, cityPicker.anchor, cityPicker.after = index, anchor, after
-  local message = C.Messages()[index]
-  local choices = C.CityChoices(message)
-  local accent = C.Accent and C.Accent() or { 1, 0.82, 0 }
-  for slot, choice in ipairs(choices) do
-    local row = cityPicker.rows[slot]
-    if not row then
-      row = CreateFrame("Button", nil, cityPicker)
-      row:SetSize(CITY_WIDTH - 12, CITY_ROW)
-      row.mark = row:CreateTexture(nil, "BACKGROUND")
-      row.mark:SetAllPoints()
-      row.mark:SetColorTexture(accent[1], accent[2], accent[3], 0.35)
-      local hover = row:CreateTexture(nil, "HIGHLIGHT")
-      hover:SetAllPoints()
-      hover:SetColorTexture(1, 1, 1, 0.12)
-      row.icon = row:CreateTexture(nil, "ARTWORK")
-      row.icon:SetSize(CITY_ROW - 4, CITY_ROW - 4)
-      row.icon:SetPoint("LEFT", 2, 0)
-      row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-      row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-      row.text:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
-      row.text:SetPoint("RIGHT", -4, 0)
-      row.text:SetJustifyH("LEFT")
-      row:SetScript("OnClick", function(self)
-        C.SetCity(cityPicker.index, self.city)
-        cityPicker:Hide()
-        if cityPicker.after then
-          cityPicker.after()
-        end
-      end)
-      cityPicker.rows[slot] = row
-    end
-    row:ClearAllPoints()
-    row:SetPoint("TOPLEFT", 6, -6 - (slot - 1) * CITY_ROW)
-    row.city = choice.city or nil
-    row.icon:SetTexture(choice.icon)
-    row.text:SetText(choice.name)
-    local picked = message and ((choice.city or nil) == message.city)
-    row.mark:SetShown(picked and true or false)
-    row:Show()
-  end
-  for slot = #choices + 1, #cityPicker.rows do
-    cityPicker.rows[slot]:Hide()
-  end
-  cityPicker:SetSize(CITY_WIDTH, 12 + #choices * CITY_ROW)
+  PaintWhereWhen()
   cityPicker:ClearAllPoints()
   cityPicker:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
   cityPicker:Show()
@@ -931,10 +1131,15 @@ function C.CityButton(parent, index, after)
       return
     end
     local message = C.Messages()[self.index]
-    local city = message and C.CityName(message.city)
+    local lines = C.ConditionLines(message)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:AddLine(city and ("For %s only"):format(city) or "For any city")
-    GameTooltip:AddLine("Click: pick the city this message is for. Its button shows only there.", 1, 1, 1, true)
+    GameTooltip:AddLine(#lines > 0 and L["Where and when"] or L["Any city, any time"])
+    for _, line in ipairs(lines) do
+      GameTooltip:AddLine(line, 1, 1, 1, true)
+    end
+    GameTooltip:AddLine(
+      L["Click: pick the city, the channel and the time of day for this message. Its button shows only then."],
+      0.6, 0.6, 0.6, true)
     GameTooltip:Show()
   end)
   button:SetScript("OnLeave", function()
@@ -947,7 +1152,7 @@ end
 
 function C.PaintCityButton(button, message)
   button.icon:SetTexture(C.CityIcon(message and message.city))
-  button.icon:SetDesaturated(not (message and C.CityName(message.city)))
+  button.icon:SetDesaturated(#C.ConditionLines(message) == 0)
 end
 
 -- A small grid of icons beside `anchor` for message `index`: "Auto" first, then C.IconChoices(). A click picks and
@@ -988,7 +1193,7 @@ function C.ShowIconPicker(anchor, index, after)
       hover:SetColorTexture(1, 1, 1, 0.2)
       cell.auto = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
       cell.auto:SetPoint("BOTTOM", 0, 2)
-      cell.auto:SetText("Auto")
+      cell.auto:SetText(L["Auto"])
       cell:SetScript("OnClick", function(self)
         C.SetIcon(picker.index, self.choice or nil)
         picker:Hide()
@@ -1033,7 +1238,7 @@ local function Notify(due)
       notified[message] = mark
       sound = true
       if settings.remind then
-        C.Say(#C.Messages() > 1 and ("Message %d is ready: click its button."):format(entry.index) or C.StatusText())
+        C.Say(#C.Messages() > 1 and L["Message %d is ready: click its button."]:format(entry.index) or C.StatusText())
       end
     end
   end
@@ -1106,11 +1311,11 @@ function C.Refresh()
     if own == "wait" then
       button.label:SetText(C.Clock(C.WaitFor(entry.message)))
     elseif own == "due" then
-      button.label:SetText("Post")
+      button.label:SetText(L["Post"])
     elseif own == "paused" then
-      button.label:SetText("Paused")
+      button.label:SetText(L["Paused"])
     elseif own == "long" then
-      button.label:SetText("Long")
+      button.label:SetText(L["Long"])
     else
       button.label:SetText("")
     end
@@ -1134,7 +1339,7 @@ end
 
 function C.SetPaused(paused)
   C.Char().paused = paused and true or false
-  C.Say(paused and "Paused on this character." or "Posting again.")
+  C.Say(paused and L["Paused on this character."] or L["Posting again."])
   C.Refresh()
 end
 

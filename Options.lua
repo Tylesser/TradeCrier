@@ -1,4 +1,5 @@
 local addonName, ns = ...
+local L = ns.L
 
 -- Tylesser - Trade Crier: the options page (Esc > Options > AddOns) and /crier. The page scrolls: the message list
 -- grows a row per message.
@@ -30,17 +31,19 @@ local function RowState(message)
   if state == "empty" then
     return "", T.MUTED
   elseif state == "off" then
-    return "off", T.MUTED
+    return L["off"], T.MUTED
   elseif state == "long" then
-    return "too long", { 1, 0.3, 0.3 }
+    return L["too long"], { 1, 0.3, 0.3 }
   elseif state == "elsewhere" then
-    return "elsewhere", T.MUTED
+    return L["elsewhere"], T.MUTED
+  elseif state == "later" then
+    return L["later"], T.MUTED
   end
   local wait = C.WaitFor(message)
   if wait > 0 then
-    return "in " .. C.Clock(wait), T.MUTED
+    return L["in %s"]:format(C.Clock(wait)), T.MUTED
   end
-  return "ready", T.GOLD
+  return L["ready"], T.GOLD
 end
 
 local function Refresh()
@@ -78,21 +81,21 @@ local function Refresh()
   view.content:SetHeight(BASE_HEIGHT + #messages * ROW)
 
   local _, text, unknown = C.MessageState(messages[view.active])
-  view.previewLabel:SetText(#messages > 1 and ("Message %d in chat reads"):format(view.active) or "In chat it reads")
-  view.preview:SetText(text ~= "" and text or "(nothing yet)")
+  view.previewLabel:SetText(#messages > 1 and L["Message %d in chat reads"]:format(view.active) or L["In chat it reads"])
+  view.preview:SetText(text ~= "" and text or L["(nothing yet)"])
   view.count:SetText(("%d / %d"):format(#text, C.MAX_LENGTH))
   if #text > C.MAX_LENGTH then
     view.count:SetTextColor(1, 0.3, 0.3)
   else
     view.count:SetTextColor(T.MUTED[1], T.MUTED[2], T.MUTED[3])
   end
-  view.unknown:SetText(#unknown > 0 and (table.concat(unknown, ", ") .. " matched none of your professions.") or "")
+  view.unknown:SetText(#unknown > 0 and L["%s matched none of your professions."]:format(table.concat(unknown, ", ")) or "")
   view.status:SetText(C.StatusText())
-  view.channel:SetText(C.ChannelDef(settings.channel).name)
+  view.channel:SetText(C.ChannelName(settings.channel))
   for _, check in ipairs(view.checks) do
     check:SetChecked((check.char and char or settings)[check.key] and true or false)
   end
-  view.key:SetText(view.capturing and "Press a key" or (settings.key or "Not set"))
+  view.key:SetText(view.capturing and L["Press a key"] or (settings.key or L["Not set"]))
   -- one insert button per profession that has a link, in rows that fit the page
   local professions = C.Linkable()
   for index, button in ipairs(view.inserts) do
@@ -158,7 +161,7 @@ local function MessageRow(parent, index)
   row.state = Label(row, "", "small")
   row.state:SetPoint("RIGHT", row.remove, "LEFT", -6, 0)
   row.state:SetWidth(60)
-  local unit = Muted(Label(row, "s", "small"))
+  local unit = Muted(Label(row, L["s"], "small"))
   unit:SetPoint("RIGHT", row.state, "LEFT", -8, 0)
   row.every = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
   row.every:SetSize(50, 20)
@@ -187,7 +190,7 @@ local function MessageRow(parent, index)
   end)
   row.every:SetScript("OnEnterPressed", row.every.ClearFocus)
   row.every:SetScript("OnEscapePressed", row.every.ClearFocus)
-  local every = Muted(Label(row, "every", "small"))
+  local every = Muted(Label(row, L["every"], "small"))
   every:SetPoint("RIGHT", row.every, "LEFT", -10, 0)
   row.box = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
   row.box:SetHeight(20)
@@ -246,12 +249,9 @@ local function Build()
   view.scroll, view.content = scroll, content
   local left = 10
 
-  local messageLabel = Label(content, "Your messages")
+  local messageLabel = Label(content, L["Your messages"])
   messageLabel:SetPoint("TOPLEFT", left, -4)
-  local messageHint = Muted(Label(content, ("Each message has its own button by your character, with its icon, its "
-    .. "own countdown and its own time in seconds (%d at least): it lights up when that message is ready, and a click "
-    .. "posts it. The post key posts the one that has waited longest. Click an icon here to pick another; until you "
-    .. "do, a message shows the profession it links. Untick a message to keep it without posting it."):format(
+  local messageHint = Muted(Label(content, L["Each message has its own button by your character, with its icon, its own countdown and its own time in seconds (%d at least): it lights up when that message is ready, and a click posts it. The post key posts the one that has waited longest. Click an icon here to pick another; until you do, a message shows the profession it links. Untick a message to keep it without posting it."]:format(
     C.MIN_EVERY), "small"))
   messageHint:SetPoint("TOPLEFT", messageLabel, "BOTTOMLEFT", 0, -4)
   messageHint:SetWidth(WIDTH)
@@ -264,7 +264,7 @@ local function Build()
     view.rows[index] = MessageRow(view.rowHolder, index)
   end
   view.message = view.rows[1].box
-  view.add = T.Button(content, 130, 20, "Add a message")
+  view.add = T.Button(content, 130, 20, L["Add a message"])
   view.add:SetPoint("TOPLEFT", view.rowHolder, "BOTTOMLEFT", 0, -4)
   view.add:SetScript("OnClick", function()
     local index = C.AddMessage()
@@ -278,7 +278,7 @@ local function Build()
   view.insertRow = CreateFrame("Frame", nil, content)
   view.insertRow:SetPoint("TOPLEFT", view.add, "BOTTOMLEFT", 0, -12)
   view.insertRow:SetSize(WIDTH, 20)
-  view.insertLabel = Muted(Label(view.insertRow, "Put in a link:", "small"))
+  view.insertLabel = Muted(Label(view.insertRow, L["Put in a link:"], "small"))
   view.insertLabel:SetPoint("TOPLEFT", 0, -4)
   view.inserts = {}
   for index = 1, 6 do
@@ -288,21 +288,19 @@ local function Build()
     end)
     view.inserts[index] = button
   end
-  view.insertAll = T.Button(content, 110, 20, "All professions")
+  view.insertAll = T.Button(content, 110, 20, L["All professions"])
   view.insertAll:SetScript("OnClick", function()
     Insert("<professions>")
   end)
-  view.noProfessions = Muted(Label(view.insertRow, "(none of your professions has a link yet)", "small"))
+  view.noProfessions = Muted(Label(view.insertRow, L["(none of your professions has a link yet)"], "small"))
   view.noProfessions:SetPoint("TOPLEFT", INSERT_INDENT, -4)
 
-  local hint = Muted(Label(content, "<Tailoring> becomes your Tailoring link when it is posted, <professions> all of "
-    .. "them. Professions you gather with (and Fishing) have no link. The buttons put the link into the message you "
-    .. "last clicked; shift-click an item or a recipe while a box has the cursor to put its link in.", "small"))
+  local hint = Muted(Label(content, L["<Tailoring> becomes your Tailoring link when it is posted, <professions> all of them. Professions you gather with (and Fishing) have no link. The buttons put the link into the message you last clicked; shift-click an item or a recipe while a box has the cursor to put its link in."], "small"))
   hint:SetPoint("TOPLEFT", view.insertRow, "BOTTOMLEFT", 0, -10)
   hint:SetWidth(WIDTH)
   hint:SetWordWrap(true)
 
-  view.previewLabel = Label(content, "In chat it reads")
+  view.previewLabel = Label(content, L["In chat it reads"])
   view.previewLabel:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -14)
   view.count = Label(content, "", "small")
   view.count:SetPoint("LEFT", view.previewLabel, "RIGHT", 10, 0)
@@ -318,21 +316,19 @@ local function Build()
   view.status = Label(content, "")
   view.status:SetPoint("TOPLEFT", view.unknown, "BOTTOMLEFT", 0, -12)
   view.status:SetWidth(WIDTH)
-  local post = T.Button(content, 110, 22, "Post now", true)
+  local post = T.Button(content, 110, 22, L["Post now"], true)
   post:SetPoint("TOPLEFT", view.status, "BOTTOMLEFT", 0, -8)
   post:SetScript("OnClick", function()
     C.Post()
     Refresh()
   end)
-  local postNote = Muted(Label(content, "The game sends a Trade chat message only when you click or press a key, so "
-    .. "a message's button by your character lights up when it's ready and you post it with one click. Post now sends "
-    .. "the one that has waited longest.", "small"))
+  local postNote = Muted(Label(content, L["The game sends a Trade chat message only when you click or press a key, so a message's button by your character lights up when it's ready and you post it with one click. Post now sends the one that has waited longest."], "small"))
   postNote:SetPoint("LEFT", post, "RIGHT", 10, 0)
   postNote:SetWidth(WIDTH - 120)
   postNote:SetWordWrap(true)
 
   -- the channel
-  local channelLabel = Label(content, "Channel")
+  local channelLabel = Label(content, L["Channel"])
   channelLabel:SetPoint("TOPLEFT", post, "BOTTOMLEFT", 0, -22)
   view.channel = T.Button(content, 130, 20, "")
   view.channel:SetPoint("LEFT", channelLabel, "RIGHT", 10, 0)
@@ -346,12 +342,12 @@ local function Build()
   view.checks = {}
   local anchor = channelLabel
   for index, option in ipairs({
-    { "paused", "Pause on this character", true },
-    { "sound", "Play a sound when it's time to post" },
-    { "remind", "Say in chat when it's time to post" },
-    { "onlyCities", "Only show the button in cities" },
-    { "locked", "Lock the buttons in place" },
-    { "column", "Stack the buttons in a column" },
+    { "paused", L["Pause on this character"], true },
+    { "sound", L["Play a sound when it's time to post"] },
+    { "remind", L["Say in chat when it's time to post"] },
+    { "onlyCities", L["Only show the button in cities"] },
+    { "locked", L["Lock the buttons in place"] },
+    { "column", L["Stack the buttons in a column"] },
   }) do
     local check = T.Check(content, option[2])
     check.key, check.char = option[1], option[3]
@@ -370,7 +366,7 @@ local function Build()
   end
 
   -- the key
-  local keyLabel = Label(content, "Post key")
+  local keyLabel = Label(content, L["Post key"])
   keyLabel:SetPoint("TOPLEFT", channelLabel, "BOTTOMLEFT", 320, -16)
   view.key = T.Button(content, 110, 22, "")
   view.key:SetPoint("LEFT", keyLabel, "RIGHT", 10, 0)
@@ -398,15 +394,15 @@ local function Build()
     self:EnableKeyboard(false)
     local before = C.SetKey(name or nil)
     if before then
-      C.Say(("%s did \"%s\"; while it posts, that comes back when you clear it here."):format(name, before))
+      C.Say(L["%s did \"%s\"; while it posts, that comes back when you clear it here."]:format(name, before))
     end
     Refresh()
   end)
-  local keyHint = Muted(Label(content, "Click, then press a key. Escape or right-click clears it.", "small"))
+  local keyHint = Muted(Label(content, L["Click, then press a key. Escape or right-click clears it."], "small"))
   keyHint:SetPoint("TOPLEFT", keyLabel, "BOTTOMLEFT", 0, -10)
   keyHint:SetWidth(WIDTH - 320)
   keyHint:SetWordWrap(true)
-  local reset = T.Button(content, 150, 22, "Put the buttons back")
+  local reset = T.Button(content, 150, 22, L["Put the buttons back"])
   reset:SetPoint("TOPLEFT", keyHint, "BOTTOMLEFT", 0, -14)
   reset:SetScript("OnClick", C.ResetPlace)
 end
@@ -415,7 +411,7 @@ local function CreateOptions()
   panel = CreateFrame("Frame")
   panel.name = ns.TITLE
   T.OptionsPage(panel, "Trade Crier",
-    "Your messages with your profession links in Trade chat, each again after its own time while you are in a city.")
+    L["Your messages with your profession links in Trade chat, each again after its own time while you are in a city."])
   panel:SetScript("OnShow", function()
     if not view then
       Build()
@@ -448,7 +444,7 @@ local loader = CreateFrame("Frame")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:SetScript("OnEvent", function()
   CreateOptions()
-  T.AddCompartment({ text = ns.TITLE, onClick = ns.OpenOptions, tooltip = { "Click to open the options." } })
+  T.AddCompartment({ text = ns.TITLE, onClick = ns.OpenOptions, tooltip = { L["Click to open the options."] } })
 end)
 
 SLASH_TYLESSERTRADECRIER1 = "/crier"
@@ -460,7 +456,6 @@ SlashCmdList.TYLESSERTRADECRIER = function(msg)
   elseif command == "feedback" then
     T.ShowFeedback()
   elseif not C.Command(command) then
-    C.Say("/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, "
-      .. "/crier status, /crier reset puts the buttons back, /crier feedback.")
+    C.Say(L["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier feedback."])
   end
 end

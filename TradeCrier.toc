@@ -12,6 +12,8 @@
 ## X-Website: https://tylesser.com/tradecrier/
 
 Tylesser.lua
+Locales.lua
+CrierLocales.lua
 Host.lua
 Crier.lua
 Options.lua

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0
+
+- **In your language**: German, French, Spanish, Russian and Brazilian Portuguese game clients now show the addon in their language (other clients stay in English). Russian clients get the game's own font for headings, since the addon's fonts have no Cyrillic letters.
+- **A channel and a time of day per message**: the city button's list now also picks the channel a message goes to (Trade or Trade (Services), or the one set for all) and the time of day it is for (mornings, afternoons, evenings or nights, by your clock). Outside its hours a message's button hides and the post key skips it. The list stays open, so you can set all three at once.
+
 ## 1.3.0
 
 - **A message for one city only**: the new city button next to a message's icon picks the city it is for (or any city). Its button then shows only there, and the post key skips it elsewhere, so you can write a different message for each city you trade in.

@@ -27,6 +27,11 @@ A message with the character's profession links in Trade chat, again every few m
   is "elsewhere": no button, skipped by `C.NextMessage`, `C.Post(i)` refuses it; only those = state "elsewhere".
   `C.ShowCityPicker` / `C.CityButton` / `C.PaintCityButton` live in Crier.lua so both hosts' rows share them. The
   teleport icons (SpellMisc of Teleport: <city>, files checked in Forever's list) are also icon choices.
+- Channel and hours per message (2026-11-27): `message.channel` (C.CHANNELS key, nil = the account's; `C.MessageChannel`,
+  used by Post / State / tooltips) and `message.hours = { from, to }` (local hours, `to` excluded, from > to past
+  midnight; `C.Hour`, `C.InItsHours`, state "later"). The city button's list is `C.WhereWhenChoices` (headings City /
+  Channel / Time of day, `C.HOURS` presets) and stays open on a pick. Messages are per character already, so there is
+  no character condition.
 - `Options.lua`: the options page (T kit, in a scroll frame since the message list grows) and `/crier`.
 - Test: `node tools/harness/run.js tc_test.lua E:/Games/Wow/Addons/TradeCrier` (from tools/harness).
 - GitHub Tylesser/TradeCrier, CurseForge 1831458, Wago BKpEyRGE (slug tylesser-trade-crier), all made 2026-11-26.

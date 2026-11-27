@@ -17,7 +17,7 @@ with your **profession links**, and while you are in a city with Trade chat each
   **Trade** or **Trade (Services)**.
 - **An icon per message**: until you pick one, a message takes the icon of the profession it links (`<Tailoring>` = Tailoring's).
   The picker also has the capitals' teleport icons.
-- **A message for one city**, if you like: pick the city next to the message's icon, and its button shows only there.
+- **Where and when**, if you like: the button next to a message's icon picks the city it is for, the channel it goes to (Trade or Trade (Services)) and the time of day (mornings, afternoons, evenings or nights). Its button shows only then.
 - **One click posts it.** The game only sends a Trade chat message when you click or press a key, so the addon never
   posts on its own: click the button, press the key you picked, or type `/crier post`.
 - **Only where it makes sense**: the button shows in the capital cities (where Trade chat is), and you can pause it
@@ -31,6 +31,8 @@ with your **profession links**, and while you are in a city with Trade chat each
 - `/crier post` posts the message that has waited longest, `/crier pause` / `/crier resume`, `/crier status`, `/crier reset` puts the buttons back.
 
 Please keep to your realm's Trade chat rules: a post every few minutes is plenty, so keep the times long.
+
+Languages: English, German, French, Spanish (Spain and Mexico), Russian and Brazilian Portuguese, following your game client.
 
 ## Feedback
 
