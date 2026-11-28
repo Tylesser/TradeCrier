@@ -1012,6 +1012,7 @@ local function PickerPanel(name)
   end
   return panel
 end
+C.PickerPanel = PickerPanel -- also the buyers' list (CrierWatch.lua)
 
 local CITY_ROW, CITY_WIDTH = 22, 180
 
@@ -1503,9 +1504,12 @@ function C.Start()
   end
   C.ApplyKey()
   C.Refresh()
+  if C.StartWatch then
+    C.StartWatch() -- buyers in Trade chat (CrierWatch.lua)
+  end
 end
 
--- /crier post (typed: the Enter key is the key press the game wants), pause, resume.
+-- /crier post (typed: the Enter key is the key press the game wants), pause, resume, reset, status, requests.
 function C.Command(word)
   word = (word or ""):lower()
   if word == "post" then
@@ -1522,6 +1526,9 @@ function C.Command(word)
     return true
   elseif word == "status" then
     C.Say(C.StatusText())
+    return true
+  elseif word == "requests" and C.ShowRequests then
+    C.ShowRequests()
     return true
   end
   return false

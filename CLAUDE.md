@@ -32,6 +32,17 @@ A message with the character's profession links in Trade chat, again every few m
   midnight; `C.Hour`, `C.InItsHours`, state "later"). The city button's list is `C.WhereWhenChoices` (headings City /
   Channel / Time of day, `C.HOURS` presets) and stays open on a pick. Messages are per character already, so there is
   no character condition.
+- Buyers in Trade chat (2026-11-28, the user's request): **CrierWatch.lua is Codex's `Modules/Crier/CrierWatch.lua`,
+  byte for byte**, loaded after Crier.lua (CrierLocales.lua holds its texts, also shared). `C.StartWatch` (from
+  `C.Start`) listens to CHAT_MSG_CHANNEL (zoneChannelID 2/42, 1/26 with `watchMore`; text, sender and guid may be
+  secret in chat messaging lockdown: skipped) and learns `C.Char().products[itemID] = professionID` from the own
+  profession window (TRADE_SKILL_SHOW / LIST_UPDATE, C_TradeSkillUI like Codex Professions; classic API fallback;
+  max 2000). `C.MatchRequest`: a request word (`settings.requestWords`, nil = the translated default) and an item
+  link / keyword / profession stem / item name; adverts (|Htrade:, wts, lfw) skipped. Rows in `C.Char().requests`
+  (20, an hour, one per sender per 5 min); `C.ShowRequests` (window from `C.PickerPanel`), `/crier requests`.
+  `C.Whisper` = `ChatFrameUtil.SendTellWithMessage` (opens the box only, never sends). Settings `watch` (off),
+  `watchMore`, `watchSound`, `watchChat`, `keywords`, `requestWords`, `reply` in the account DB. Both hosts' option
+  pages build the part from `C.WATCH_CHECKS` / `C.WATCH_BOXES`.
 - `Options.lua`: the options page (T kit, in a scroll frame since the message list grows) and `/crier`.
 - Test: `node tools/harness/run.js tc_test.lua E:/Games/Wow/Addons/TradeCrier` (from tools/harness).
 - GitHub Tylesser/TradeCrier, CurseForge 1831458, Wago BKpEyRGE (slug tylesser-trade-crier), all made 2026-11-26.

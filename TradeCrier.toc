@@ -16,4 +16,5 @@ Locales.lua
 CrierLocales.lua
 Host.lua
 Crier.lua
+CrierWatch.lua
 Options.lua

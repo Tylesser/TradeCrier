@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0
+
+- **Buyers in Trade chat** (off until you switch it on, on the options page): players asking in Trade chat for something you make (a link to an item your recipes make, your profession, an item's name or your own keywords, with a request word like LF, WTB or need) give a chat line with their name to click, a sound if you like, and a row in `/crier requests` with a **Whisper** button. Whisper only opens the chat box with your reply and profession links in it; nothing is ever sent for you. Open each profession window once so Trade Crier learns what you make.
+
 ## 1.5.0
 
 - **Clearer options page**: thin lines separate the messages, the chat preview and the channel, button and key settings.

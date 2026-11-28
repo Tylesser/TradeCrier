@@ -23,12 +23,20 @@ with your **profession links**, and while you are in a city with Trade chat each
 - **Only where it makes sense**: the button shows in the capital cities (where Trade chat is), and you can pause it
   per character.
 - Shows how long each message is with its links (the game takes 255 letters) and what it will look like in chat.
+- **Buyers in Trade chat** (off until you switch it on): Trade Crier watches Trade and Trade (Services) (General and
+  LookingForGroup too, if you like) for players asking for something you make: a link to an item your recipes make,
+  your profession ("LF tailor"), an item's name or one of your own keywords, together with a request word ("LF",
+  "WTB", "need", ... in your game's language; you can change the list). You get a chat line with the buyer's name
+  (click it to whisper), a sound if you like, and `/crier requests` lists the last ones with a **Whisper** button.
+  Whisper only opens the chat box with your reply in it (your profession links); nothing is sent until you press
+  Enter. Adverts (a message with a profession link, WTS, LFW), your own messages and the same buyer again within 5
+  minutes are left out. Open each of your profession windows once so it learns what you make.
 
 ## Usage
 
 - `/crier`, or Esc > Options > AddOns > **Tylesser** > Open Tylesser settings. The options open in Tylesser's own settings window.
 - Click a message's button to post it, right-click for the options, Shift-right-click to pause, drag to move the buttons.
-- `/crier post` posts the message that has waited longest, `/crier pause` / `/crier resume`, `/crier status`, `/crier reset` puts the buttons back.
+- `/crier post` posts the message that has waited longest, `/crier pause` / `/crier resume`, `/crier status`, `/crier reset` puts the buttons back, `/crier requests` lists the buyers.
 
 Please keep to your realm's Trade chat rules: a post every few minutes is plenty, so keep the times long.
 

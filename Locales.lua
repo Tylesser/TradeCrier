@@ -40,7 +40,7 @@ T.Translations("deDE", {
   ["Put the buttons back"] = "Knöpfe zurücksetzen",
   ["Your messages with your profession links in Trade chat, each again after its own time while you are in a city."] = "Deine Nachrichten mit deinen Berufslinks im Handelschat, jede wieder nach ihrer eigenen Zeit, solange du in einer Stadt bist.",
   ["Click to open the options."] = "Klicken, um die Optionen zu öffnen.",
-  ["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier feedback."] = "/crier öffnet die Optionen. /crier post postet die Nachricht, die am längsten wartet, /crier pause | resume, /crier status, /crier reset setzt die Knöpfe zurück, /crier feedback.",
+  ["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier requests lists the buyers, /crier feedback."] = "/crier öffnet die Optionen. /crier post postet die Nachricht, die am längsten wartet, /crier pause | resume, /crier status, /crier reset setzt die Knöpfe zurück, /crier requests listet die Käufer, /crier feedback.",
 })
 
 T.Translations("frFR", {
@@ -79,7 +79,7 @@ T.Translations("frFR", {
   ["Put the buttons back"] = "Replacer les boutons",
   ["Your messages with your profession links in Trade chat, each again after its own time while you are in a city."] = "Vos messages avec vos liens de métiers dans Commerce, chacun à nouveau après son propre délai tant que vous êtes en ville.",
   ["Click to open the options."] = "Cliquez pour ouvrir les options.",
-  ["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier feedback."] = "/crier ouvre les options. /crier post publie le message qui attend depuis le plus longtemps, /crier pause | resume, /crier status, /crier reset replace les boutons, /crier feedback.",
+  ["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier requests lists the buyers, /crier feedback."] = "/crier ouvre les options. /crier post publie le message qui attend depuis le plus longtemps, /crier pause | resume, /crier status, /crier reset replace les boutons, /crier requests liste les acheteurs, /crier feedback.",
 })
 
 T.Translations("esES", {
@@ -118,7 +118,7 @@ T.Translations("esES", {
   ["Put the buttons back"] = "Recolocar botones",
   ["Your messages with your profession links in Trade chat, each again after its own time while you are in a city."] = "Tus mensajes con los enlaces de tus profesiones en el chat de Comercio, cada uno de nuevo tras su propio tiempo mientras estás en una ciudad.",
   ["Click to open the options."] = "Haz clic para abrir las opciones.",
-  ["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier feedback."] = "/crier abre las opciones. /crier post publica el mensaje que más tiempo lleva esperando, /crier pause | resume, /crier status, /crier reset recoloca los botones, /crier feedback.",
+  ["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier requests lists the buyers, /crier feedback."] = "/crier abre las opciones. /crier post publica el mensaje que más tiempo lleva esperando, /crier pause | resume, /crier status, /crier reset recoloca los botones, /crier requests muestra los compradores, /crier feedback.",
 })
 
 T.Translations("ruRU", {
@@ -157,7 +157,7 @@ T.Translations("ruRU", {
   ["Put the buttons back"] = "Вернуть кнопки",
   ["Your messages with your profession links in Trade chat, each again after its own time while you are in a city."] = "Ваши сообщения со ссылками на профессии в канале «Торговля», каждое снова через своё время, пока вы в городе.",
   ["Click to open the options."] = "Щелкните, чтобы открыть настройки.",
-  ["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier feedback."] = "/crier открывает настройки. /crier post отправляет сообщение, которое ждёт дольше всех, /crier pause | resume, /crier status, /crier reset возвращает кнопки на место, /crier feedback.",
+  ["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier requests lists the buyers, /crier feedback."] = "/crier открывает настройки. /crier post отправляет сообщение, которое ждёт дольше всех, /crier pause | resume, /crier status, /crier reset возвращает кнопки на место, /crier requests показывает покупателей, /crier feedback.",
 })
 
 T.Translations("ptBR", {
@@ -196,5 +196,5 @@ T.Translations("ptBR", {
   ["Put the buttons back"] = "Repor os botões",
   ["Your messages with your profession links in Trade chat, each again after its own time while you are in a city."] = "Suas mensagens com os links das suas profissões no chat de Comércio, cada uma de novo após seu próprio tempo enquanto você está numa cidade.",
   ["Click to open the options."] = "Clique para abrir as opções.",
-  ["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier feedback."] = "/crier abre as opções. /crier post posta a mensagem que espera há mais tempo, /crier pause | resume, /crier status, /crier reset repõe os botões, /crier feedback.",
+  ["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier requests lists the buyers, /crier feedback."] = "/crier abre as opções. /crier post posta a mensagem que espera há mais tempo, /crier pause | resume, /crier status, /crier reset repõe os botões, /crier requests lista os compradores, /crier feedback.",
 })

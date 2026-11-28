@@ -10,7 +10,7 @@ local C = ns.crier
 local WIDTH = 560
 local INSERT_INDENT = 92 -- the insert buttons start right of "Put in a link:"
 local ROW = 28 -- one message row
-local BASE_HEIGHT = 620 -- the page below and above the message rows (with the lines between its groups)
+local BASE_HEIGHT = 1000 -- the page below and above the message rows (with the lines between its groups and the buyers)
 local panel, view
 
 local function Label(parent, text, size)
@@ -114,6 +114,13 @@ local function Refresh()
   end
   buttons[#buttons + 1] = view.insertAll
   C.FlowButtons(view.insertRow, buttons, WIDTH, INSERT_INDENT, 6, 20)
+  -- buyers in Trade chat (CrierWatch.lua)
+  for _, box in ipairs(view.watchBoxes) do
+    if not box:HasFocus() then
+      box:SetText(C.WatchText(box.key))
+    end
+  end
+  view.watchStatus:SetText(C.WatchStatus())
 end
 ns.RefreshOptions = Refresh
 
@@ -410,6 +417,68 @@ local function Build()
   local reset = T.Button(content, 150, 22, L["Put the buttons back"])
   reset:SetPoint("TOPLEFT", keyHint, "BOTTOMLEFT", 0, -14)
   reset:SetScript("OnClick", C.ResetPlace)
+
+  -- buyers in Trade chat (CrierWatch.lua, 2026-11-28): the checks, the three text boxes, what it knows, the list
+  local watchLine = T.Divider(content, WIDTH, 13)
+  watchLine:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 4, -10)
+  local watchLabel = Label(content, L["Buyers in Trade chat"])
+  watchLabel:SetPoint("TOPLEFT", watchLine, "BOTTOMLEFT", 0, -8)
+  local watchHint = Muted(Label(content, L["Trade Crier can watch Trade chat for players asking for something you make: a link to an item your recipes make, your profession, an item's name or one of your keywords, with a request word. You get a chat line, a sound if you like, and a list with a Whisper button. Nothing is ever sent for you."], "small"))
+  watchHint:SetPoint("TOPLEFT", watchLabel, "BOTTOMLEFT", 0, -4)
+  watchHint:SetWidth(WIDTH)
+  watchHint:SetWordWrap(true)
+  anchor = watchHint
+  for index, option in ipairs(C.WATCH_CHECKS) do
+    local check = T.Check(content, C.WatchLabel(option.label))
+    check.key = option.key
+    check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", index == 1 and -4 or 0, index == 1 and -8 or -2)
+    check:SetScript("OnClick", function(self)
+      C.Settings()[self.key] = self:GetChecked() and true or false
+      Changed()
+    end)
+    view.checks[#view.checks + 1] = check
+    anchor = check
+  end
+  view.watchBoxes = {}
+  local boxAnchor, first = anchor, true
+  for _, option in ipairs(C.WATCH_BOXES) do
+    local label = Label(content, C.WatchLabel(option.label), "small")
+    label:SetPoint("TOPLEFT", boxAnchor, "BOTTOMLEFT", first and 4 or 0, first and -12 or -10)
+    label:SetWidth(110)
+    first = false
+    local box = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+    box:SetSize(WIDTH - 120, 20)
+    box:SetPoint("LEFT", label, "RIGHT", 6, 0)
+    box:SetAutoFocus(false)
+    box:SetMaxLetters(C.MAX_LENGTH)
+    T.EditBox(box)
+    box.key = option.key
+    local function Save(self)
+      C.SetWatchText(self.key, self:GetText())
+      self:SetText(C.WatchText(self.key))
+    end
+    box:SetScript("OnEditFocusLost", Save)
+    box:SetScript("OnEnterPressed", box.ClearFocus)
+    box:SetScript("OnEscapePressed", box.ClearFocus)
+    if option.key == "reply" then
+      C.WatchLinks(function()
+        return box
+      end)
+    end
+    view.watchBoxes[#view.watchBoxes + 1] = box
+    local hint = Muted(Label(content, C.WatchLabel(option.hint), "small"))
+    hint:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -8)
+    hint:SetWidth(WIDTH)
+    hint:SetWordWrap(true)
+    boxAnchor = hint
+  end
+  view.watchStatus = Label(content, "", "small")
+  view.watchStatus:SetPoint("TOPLEFT", boxAnchor, "BOTTOMLEFT", 0, -12)
+  view.watchStatus:SetWidth(WIDTH)
+  view.watchStatus:SetWordWrap(true)
+  local requests = T.Button(content, 150, 22, L["Show the requests"])
+  requests:SetPoint("TOPLEFT", view.watchStatus, "BOTTOMLEFT", 0, -8)
+  requests:SetScript("OnClick", C.ShowRequests)
 end
 
 local function CreateOptions()
@@ -455,6 +524,6 @@ SlashCmdList.TYLESSERTRADECRIER = function(msg)
   elseif command == "feedback" then
     T.ShowFeedback()
   elseif not C.Command(command) then
-    C.Say(L["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier feedback."])
+    C.Say(L["/crier opens the options. /crier post posts the message that has waited longest, /crier pause | resume, /crier status, /crier reset puts the buttons back, /crier requests lists the buyers, /crier feedback."])
   end
 end
